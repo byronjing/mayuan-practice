@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>马原以练代背</title>
+    <link rel="stylesheet" href="styles.css?v=20260612-auth">
+  </head>
+  <body>
+    <section id="authView" class="auth-shell" aria-label="登录">
+      <div class="auth-card">
+        <h1>马原以练代背</h1>
+        <p>请输入学号和密码登录。账号由管理员创建，不开放自助注册。</p>
+        <form id="loginForm" class="auth-form">
+          <label>学号<input id="studentIdInput" name="studentId" autocomplete="username" required></label>
+          <label>密码<input id="passwordInput" name="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary" type="submit">登录</button>
+        </form>
+        <p id="authStatus" class="auth-status"></p>
+      </div>
+    </section>
+
+    <main id="appView" class="app-shell" hidden>
+      <header class="topbar">
+        <div>
+          <h1>马原以练代背</h1>
+          <p id="modeText">38 套练习，每套 20 题。核心知识点会按遗忘曲线反复换问法出现。</p>
+        </div>
+        <div class="toolbar" aria-label="练习工具栏">
+          <span id="accountLabel" class="account-label"></span>
+          <button id="adminBtn" type="button" hidden>管理账号</button>
+          <button id="changePasswordBtn" type="button">改密码</button>
+          <button id="logoutBtn" type="button">退出</button>
+          <button class="icon-button" id="resetBtn" type="button" title="清空练习记录" aria-label="清空练习记录">↺</button>
+        </div>
+      </header>
+
+      <section class="data-band" aria-label="数据备份">
+        <div>
+          <h2>云端同步与备份</h2>
+          <p id="backupStatus">登录后记录会自动同步到当前学号账号。</p>
+        </div>
+        <div class="data-actions">
+          <button id="sealLocalBtn" type="button" hidden>封存本机旧记录</button>
+          <button id="importLocalBtn" type="button" hidden>导入本机旧记录到当前账号</button>
+          <button id="exportBackupBtn" type="button">导出备份</button>
+          <button id="importBackupBtn" type="button">导入备份</button>
+          <input id="importBackupInput" type="file" accept="application/json,.json" hidden>
+        </div>
+      </section>
+
+      <section class="control-band" aria-label="练习模式">
+        <div class="field">
+          <label for="setSelect">套题</label>
+          <select id="setSelect"></select>
+        </div>
+        <div class="segmented" role="group" aria-label="练习入口">
+          <button id="setModeBtn" class="active" type="button">套题练习</button>
+          <button id="randomModeBtn" type="button">随机练习</button>
+          <button id="wrongModeBtn" type="button">错题重刷</button>
+        </div>
+      </section>
+
+      <section class="dashboard" aria-label="学习统计">
+        <div class="metric">
+          <span class="metric-label">总正确率</span>
+          <strong id="accuracyMetric">0%</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">红必背掌握率</span>
+          <strong id="redMetric">0%</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">错题数</span>
+          <strong id="wrongMetric">0</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">薄弱知识点</span>
+          <strong id="weakMetric">暂无</strong>
+        </div>
+      </section>
+
+      <section class="quiz-layout">
+        <article class="quiz-panel" aria-live="polite">
+          <div class="question-head">
+            <div>
+              <span id="priorityBadge" class="badge">RED</span>
+              <span id="chapterLabel" class="chapter"></span>
+            </div>
+            <strong id="progressLabel"></strong>
+          </div>
+
+          <h2 id="questionTitle"></h2>
+          <p id="questionPrompt" class="prompt"></p>
+
+          <form id="answerForm" class="answer-area"></form>
+
+          <div class="action-row">
+            <button id="submitBtn" class="primary" type="button">提交答案</button>
+            <button id="nextBtn" type="button" disabled>下一题</button>
+            <button id="masteredBtn" type="button" hidden>已掌握</button>
+            <button id="editAnswerBtn" type="button">答案有误？手动修改</button>
+          </div>
+
+          <div id="feedback" class="feedback" hidden></div>
+        </article>
+
+        <aside class="side-panel">
+          <section>
+            <h2>错题本</h2>
+            <div class="filter-row">
+              <select id="wrongFilter" aria-label="错题筛选">
+                <option value="all">全部错题</option>
+                <option value="red">红必背</option>
+                <option value="blue">蓝常考</option>
+                <option value="black">黑补充</option>
+              </select>
+            </div>
+            <div id="wrongList" class="wrong-list"></div>
+          </section>
+
+          <section>
+            <h2>章节薄弱点</h2>
+            <div id="chapterWeakness" class="weak-list"></div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="answerDialog" class="answer-dialog">
+      <form method="dialog" id="answerEditForm">
+        <h2>手动修改答案</h2>
+        <p id="answerEditHint"></p>
+        <div id="answerEditFields" class="answer-edit-fields"></div>
+        <div class="dialog-actions">
+          <button id="resetAnswerEditBtn" value="default" type="button">恢复原始答案</button>
+          <button value="cancel" type="submit">取消</button>
+          <button id="saveAnswerEditBtn" class="primary" value="default" type="button">保存修改</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="passwordDialog" class="answer-dialog">
+      <form method="dialog" id="passwordForm">
+        <h2>修改密码</h2>
+        <label>新密码<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" required></label>
+        <p id="passwordStatus" class="auth-status"></p>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit">取消</button>
+          <button id="savePasswordBtn" class="primary" value="default" type="button">保存新密码</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="adminDialog" class="admin-dialog">
+      <form method="dialog" id="adminForm">
+        <h2>账号管理</h2>
+        <div class="admin-grid">
+          <label>学号<input id="adminStudentId" autocomplete="off"></label>
+          <label>姓名/备注<input id="adminDisplayName" autocomplete="off"></label>
+          <label>初始/重置密码<input id="adminPassword" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="dialog-actions">
+          <button id="refreshUsersBtn" type="button">刷新列表</button>
+          <button id="createUserBtn" class="primary" type="button">创建账号</button>
+          <button value="cancel" type="submit">关闭</button>
+        </div>
+        <p id="adminStatus" class="auth-status"></p>
+        <div id="adminUsers" class="admin-users"></div>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="questions.js"></script>
+    <script src="supplemental_questions.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

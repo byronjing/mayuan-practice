@@ -1,0 +1,9 @@
+private/
+node_modules/
+*.env
+.env*
+supabase/functions/.env
+supabase/.temp/
+my-practice-records-sealed.json
+mayuan-practice-backup*.json
+.DS_Store
