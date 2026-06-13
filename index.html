@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>马原以练代背</title>
-    <link rel="stylesheet" href="styles.css?v=20260612-auth">
+    <title>至尊刷题系统</title>
+    <link rel="stylesheet" href="styles.css?v=20260613-subjects">
   </head>
   <body>
     <section id="authView" class="auth-shell" aria-label="登录">
       <div class="auth-card">
-        <h1>马原以练代背</h1>
+        <h1>至尊刷题系统</h1>
         <p>请输入学号和密码登录。账号由管理员创建，不开放自助注册。</p>
         <form id="loginForm" class="auth-form">
           <label>学号<input id="studentIdInput" name="studentId" autocomplete="username" required></label>
@@ -23,8 +23,8 @@
     <main id="appView" class="app-shell" hidden>
       <header class="topbar">
         <div>
-          <h1>马原以练代背</h1>
-          <p id="modeText">38 套练习，每套 20 题。核心知识点会按遗忘曲线反复换问法出现。</p>
+          <h1>至尊刷题系统</h1>
+          <p id="modeText">选择学科后开始练习。每套约 20 题，错题会按学科分别归档。</p>
         </div>
         <div class="toolbar" aria-label="练习工具栏">
           <span id="accountLabel" class="account-label"></span>
@@ -50,6 +50,13 @@
       </section>
 
       <section class="control-band" aria-label="练习模式">
+        <div class="field">
+          <label>学科</label>
+          <div id="subjectSwitch" class="segmented" role="group" aria-label="切换学科">
+            <button id="mayuanSubjectBtn" class="active" type="button" data-subject="mayuan">马原</button>
+            <button id="junliSubjectBtn" type="button" data-subject="junli">军理</button>
+          </div>
+        </div>
         <div class="field">
           <label for="setSelect">套题</label>
           <select id="setSelect"></select>
@@ -171,9 +178,10 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js"></script>
-    <script src="questions.js"></script>
-    <script src="supplemental_questions.js"></script>
-    <script src="app.js"></script>
+    <script src="config.js?v=20260613-subjects"></script>
+    <script src="questions.js?v=20260613-subjects"></script>
+    <script src="supplemental_questions.js?v=20260613-subjects"></script>
+    <script src="military_questions.js?v=20260613-subjects"></script>
+    <script src="app.js?v=20260613-subjects"></script>
   </body>
 </html>

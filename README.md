@@ -1,13 +1,18 @@
-# 马原以练代背刷题程序
+# 至尊刷题系统
 
-这是一个支持云端账号的在线刷题程序。朋友通过 GitHub Pages 网址访问，用“学号 + 密码”登录；账号只能由管理员创建，练习进度、错题本和手动修正答案保存到 Supabase。
+这是一个支持云端账号的多学科在线刷题程序。朋友通过 GitHub Pages 网址访问，用“学号 + 密码”登录；账号只能由管理员创建，练习进度、错题本和手动修正答案保存到 Supabase。
+
+当前学科：
+
+- 马原：原有马原题库与历史进度。
+- 军理：由 `军事理论题库(1)(3)(2).docx` 转换而来。
 
 ## 在线部署结构
 
 - GitHub：托管本项目代码。
 - GitHub Pages：发布静态网页。
 - Supabase Auth：保存登录账号和密码。
-- Supabase Postgres：保存每个学号自己的刷题记录。
+- Supabase Postgres：保存每个学号自己的刷题记录；马原和军理共用同一行 `practice_records.records`，在 JSON 内按学科隔离。
 - Supabase Edge Function：管理员创建账号、重置密码、启用/停用账号。
 
 ## 本地打开
@@ -69,7 +74,10 @@ supabase functions deploy admin-users
 ## 数据隔离
 
 - 每个学号账号在 `practice_records` 中只有自己的记录。
-- 新建朋友账号时自动创建空记录：`attempts: []`、`wrongBook: {}`、`answerOverrides: {}`。
+- 马原和军理仍写入同一个云端路径：`practice_records.records`。
+- 多学科记录在 JSON 内保存为 `subjects.mayuan` 和 `subjects.junli`，错题本、练习历史、手动答案修正互相隔离。
+- 旧格式 `attempts`、`wrongBook`、`answerOverrides` 会自动当作马原历史记录读取，并补出空的军理记录。
+- 新建朋友账号默认两个学科都是空记录。
 - Row Level Security 限制普通用户只能读写自己的记录。
 - 管理员可以管理账号列表，但前端管理页不会读取朋友的完整刷题记录。
 
@@ -90,5 +98,6 @@ supabase functions deploy admin-users
 - `app.js`：刷题、登录、云端同步和管理逻辑。
 - `questions.js`：核心题库。
 - `supplemental_questions.js`：扩展题库。
+- `military_questions.js`：军理题库。
 - `supabase/migrations/001_initial_schema.sql`：数据库表和 RLS。
 - `supabase/functions/admin-users/index.ts`：管理员账号管理函数。

@@ -2,7 +2,28 @@ const STORAGE_KEY = "mayuan_practice_state_v2";
 const LEGACY_STORAGE_KEY = "mayuan_practice_state_v1";
 const BACKUP_VERSION = 1;
 const QUESTION_BANK_VERSION = "2026-05-28-release";
+const MULTI_SUBJECT_RECORD_VERSION = 2;
 const SET_SIZE = 20;
+const DEFAULT_SUBJECT = "mayuan";
+const SUBJECTS = {
+  mayuan: {
+    label: "马原",
+    getQuestions: () => window.QUESTIONS || [],
+    bankVersion: QUESTION_BANK_VERSION,
+    setModeText: (set) => `马原 · 正在练习第 ${set} 套。红色必背会反复换问法出现。`,
+    randomText: (count) => `马原 · 随机练习会从 ${count} 题中抽取 20 题，适合每天快速热身。`,
+    wrongText: "马原 · 错题重刷按错误次数优先，适合考前集中补短板。"
+  },
+  junli: {
+    label: "军理",
+    getQuestions: () => window.MILITARY_QUESTIONS || [],
+    bankVersion: "junli-2026-06-13",
+    setModeText: (set) => `军理 · 正在练习第 ${set} 套。题目来自军事理论题库。`,
+    randomText: (count) => `军理 · 随机练习会从 ${count} 题中抽取 20 题，适合考前快速过题。`,
+    wrongText: "军理 · 错题重刷只使用军理错题本，不会混入马原。"
+  }
+};
+const SUBJECT_KEYS = Object.keys(SUBJECTS);
 const CONFIG = window.MAYUAN_SUPABASE || {};
 const STUDENT_EMAIL_DOMAIN = CONFIG.studentEmailDomain || "mayuan.local";
 const supabaseClient = CONFIG.url && CONFIG.anonKey && window.supabase
@@ -16,6 +37,8 @@ const state = {
   sessionQuestions: [],
   answered: false,
   selectedAnswer: "",
+  subject: DEFAULT_SUBJECT,
+  appRecords: emptyAppRecords(),
   records: emptyRecords(),
   localRecords: null,
   profile: null,
@@ -43,6 +66,7 @@ const els = {
   exportBackupBtn: document.querySelector("#exportBackupBtn"),
   importBackupBtn: document.querySelector("#importBackupBtn"),
   importBackupInput: document.querySelector("#importBackupInput"),
+  subjectSwitch: document.querySelector("#subjectSwitch"),
   setSelect: document.querySelector("#setSelect"),
   setModeBtn: document.querySelector("#setModeBtn"),
   randomModeBtn: document.querySelector("#randomModeBtn"),
@@ -99,6 +123,23 @@ function emptyRecords() {
   };
 }
 
+function emptyAppRecords() {
+  return {
+    app: "supreme-practice",
+    recordVersion: MULTI_SUBJECT_RECORD_VERSION,
+    activeSubject: DEFAULT_SUBJECT,
+    subjects: SUBJECT_KEYS.reduce((records, subject) => {
+      records[subject] = emptyRecords();
+      return records;
+    }, {}),
+    backupMeta: {
+      backupVersion: BACKUP_VERSION,
+      questionBankVersion: "multi-subject",
+      updatedAt: null
+    }
+  };
+}
+
 function normalizeRecords(parsed) {
   const base = emptyRecords();
   if (!parsed || typeof parsed !== "object") return base;
@@ -112,6 +153,62 @@ function normalizeRecords(parsed) {
       ...(parsed.backupMeta && typeof parsed.backupMeta === "object" ? parsed.backupMeta : {})
     }
   };
+}
+
+function normalizeAppRecords(parsed) {
+  const base = emptyAppRecords();
+  if (!parsed || typeof parsed !== "object") return base;
+
+  if (parsed.subjects && typeof parsed.subjects === "object") {
+    for (const subject of SUBJECT_KEYS) {
+      base.subjects[subject] = normalizeRecords(parsed.subjects[subject]);
+    }
+    base.activeSubject = SUBJECTS[parsed.activeSubject] ? parsed.activeSubject : DEFAULT_SUBJECT;
+    base.backupMeta = {
+      ...base.backupMeta,
+      ...(parsed.backupMeta && typeof parsed.backupMeta === "object" ? parsed.backupMeta : {})
+    };
+    return base;
+  }
+
+  base.subjects.mayuan = normalizeRecords(parsed);
+  base.activeSubject = DEFAULT_SUBJECT;
+  return base;
+}
+
+function getCurrentSubject() {
+  return SUBJECTS[state.subject] ? SUBJECTS[state.subject] : SUBJECTS[DEFAULT_SUBJECT];
+}
+
+function getCurrentQuestions() {
+  return getCurrentSubject().getQuestions();
+}
+
+function syncCurrentRecordsReference() {
+  if (!state.appRecords?.subjects) state.appRecords = emptyAppRecords();
+  if (!state.appRecords.subjects[state.subject]) state.appRecords.subjects[state.subject] = emptyRecords();
+  state.records = state.appRecords.subjects[state.subject];
+}
+
+function switchSubject(subject, persistChoice = true) {
+  if (!SUBJECTS[subject] || subject === state.subject) return;
+  state.subject = subject;
+  state.appRecords.activeSubject = subject;
+  syncCurrentRecordsReference();
+  state.set = 1;
+  state.index = 0;
+  state.sessionQuestions = [];
+  state.answered = false;
+  updateSubjectButtons();
+  setupSetSelect();
+  startSet(state.set);
+  if (persistChoice) void persistRecords(`${getCurrentSubject().label}记录已同步。`);
+}
+
+function updateSubjectButtons() {
+  els.subjectSwitch?.querySelectorAll("[data-subject]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.subject === state.subject);
+  });
 }
 
 function loadRecords() {
@@ -139,9 +236,18 @@ function hasMeaningfulRecords(records) {
 }
 
 function stampRecords() {
+  syncCurrentRecordsReference();
   state.records.backupMeta = {
     backupVersion: BACKUP_VERSION,
-    questionBankVersion: QUESTION_BANK_VERSION,
+    questionBankVersion: getCurrentSubject().bankVersion,
+    updatedAt: new Date().toISOString()
+  };
+  state.appRecords.app = "supreme-practice";
+  state.appRecords.recordVersion = MULTI_SUBJECT_RECORD_VERSION;
+  state.appRecords.activeSubject = state.subject;
+  state.appRecords.backupMeta = {
+    backupVersion: BACKUP_VERSION,
+    questionBankVersion: "multi-subject",
     updatedAt: new Date().toISOString()
   };
 }
@@ -174,8 +280,8 @@ async function persistRecords(statusText = "云端记录已同步。") {
       .from("practice_records")
       .upsert({
         user_id: state.session.user.id,
-        records: state.records,
-        question_bank_version: QUESTION_BANK_VERSION,
+        records: state.appRecords,
+        question_bank_version: "multi-subject",
         updated_at: new Date().toISOString()
       }, { onConflict: "user_id" });
     if (error) throw error;
@@ -198,7 +304,7 @@ function normalizeChoiceAnswer(value) {
 }
 
 function getQuestionById(id) {
-  return window.QUESTIONS.find((question) => question.id === id);
+  return getCurrentQuestions().find((question) => question.id === id);
 }
 
 function currentQuestion() {
@@ -238,11 +344,13 @@ function formatAnswer(question) {
 }
 
 function setupSetSelect() {
-  const totalSets = Math.max(...window.QUESTIONS.map((question) => question.set));
+  const questions = getCurrentQuestions();
+  const totalSets = Math.max(1, ...questions.map((question) => question.set));
   els.setSelect.innerHTML = Array.from({ length: totalSets }, (_, index) => {
     const setNumber = index + 1;
     return `<option value="${setNumber}">第 ${setNumber} 套</option>`;
   }).join("");
+  if (state.set > totalSets) state.set = 1;
   els.setSelect.value = String(state.set);
 }
 
@@ -250,7 +358,7 @@ function startSet(setNumber) {
   state.mode = "set";
   state.set = Number(setNumber);
   state.index = 0;
-  state.sessionQuestions = window.QUESTIONS.filter((question) => question.set === state.set);
+  state.sessionQuestions = getCurrentQuestions().filter((question) => question.set === state.set);
   state.answered = false;
   updateModeButtons();
   render();
@@ -259,7 +367,7 @@ function startSet(setNumber) {
 function startRandom() {
   state.mode = "random";
   state.index = 0;
-  state.sessionQuestions = seededPick(window.QUESTIONS, SET_SIZE, Date.now());
+  state.sessionQuestions = seededPick(getCurrentQuestions(), SET_SIZE, Date.now());
   state.answered = false;
   updateModeButtons();
   render();
@@ -291,10 +399,10 @@ function updateModeButtons() {
   els.randomModeBtn.classList.toggle("active", state.mode === "random");
   els.wrongModeBtn.classList.toggle("active", state.mode === "wrong");
   els.modeText.textContent = state.mode === "set"
-    ? `正在练习第 ${state.set} 套。红色必背会反复换问法出现。`
+    ? getCurrentSubject().setModeText(state.set)
     : state.mode === "random"
-      ? `随机练习会从 ${window.QUESTIONS.length} 题中抽取 20 题，适合每天快速热身。`
-      : "错题重刷按错误次数优先，适合考前集中补短板。";
+      ? getCurrentSubject().randomText(getCurrentQuestions().length)
+      : getCurrentSubject().wrongText;
 }
 
 function render() {
@@ -537,8 +645,10 @@ function countHistoricalMistakes(key) {
 }
 
 function knowledgeTitle(knowledgeId) {
-  const point = window.KNOWLEDGE_POINTS.find((item) => item.id === knowledgeId);
-  return point ? point.title : knowledgeId;
+  const point = (window.KNOWLEDGE_POINTS || []).find((item) => item.id === knowledgeId);
+  if (point) return point.title;
+  const question = getCurrentQuestions().find((item) => item.knowledgeId === knowledgeId);
+  return question ? question.chapter : knowledgeId;
 }
 
 function renderWrongBook() {
@@ -568,9 +678,10 @@ function jumpToWrongQuestion(questionId) {
 }
 
 function clearRecords() {
-  if (!confirm("确定清空所有练习记录、错题本和手动改答案吗？")) return;
-  state.records = emptyRecords();
-  void persistRecords("已清空浏览器本地记录。");
+  if (!confirm(`确定清空${getCurrentSubject().label}的所有练习记录、错题本和手动改答案吗？`)) return;
+  state.appRecords.subjects[state.subject] = emptyRecords();
+  syncCurrentRecordsReference();
+  void persistRecords(`已清空${getCurrentSubject().label}记录。`);
   render();
 }
 
@@ -687,19 +798,25 @@ function recalculateAttemptsForQuestion(question) {
 
 function createBackupPayload() {
   return {
-    app: "mayuan-practice",
+    app: "supreme-practice",
     backupVersion: BACKUP_VERSION,
-    questionBankVersion: QUESTION_BANK_VERSION,
+    recordVersion: MULTI_SUBJECT_RECORD_VERSION,
+    questionBankVersion: "multi-subject",
     exportedAt: new Date().toISOString(),
-    records: state.records
+    records: state.appRecords
   };
 }
 
 function validateBackupPayload(payload) {
   if (!payload || typeof payload !== "object") throw new Error("备份文件不是有效 JSON。");
-  if (payload.app !== "mayuan-practice") throw new Error("这不是马原刷题程序备份文件。");
   if (!payload.records || typeof payload.records !== "object") throw new Error("备份文件缺少 records 数据。");
-  return normalizeRecords(payload.records);
+  if (payload.app === "supreme-practice") return normalizeAppRecords(payload.records);
+  if (payload.app === "mayuan-practice") {
+    const migrated = emptyAppRecords();
+    migrated.subjects.mayuan = normalizeRecords(payload.records);
+    return migrated;
+  }
+  throw new Error("这不是至尊刷题系统备份文件。");
 }
 
 function exportBackup() {
@@ -707,7 +824,7 @@ function exportBackup() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `mayuan-practice-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `supreme-practice-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(link);
   link.click();
   link.remove();
@@ -725,9 +842,13 @@ async function handleBackupImport(event) {
   if (!file) return;
   try {
     const payload = JSON.parse(await file.text());
-    state.records = validateBackupPayload(payload);
+    state.appRecords = validateBackupPayload(payload);
+    state.subject = state.appRecords.activeSubject || DEFAULT_SUBJECT;
+    syncCurrentRecordsReference();
     rebuildWrongBookFromAttempts();
     await persistRecords("已导入备份，并覆盖当前浏览器记录。");
+    updateSubjectButtons();
+    setupSetSelect();
     render();
   } catch (error) {
     alert(error.message || "导入失败，请检查备份文件。");
@@ -804,16 +925,19 @@ async function loadAccount(session) {
   if (recordError) throw recordError;
 
   if (recordRow?.records) {
-    state.records = normalizeRecords(recordRow.records);
+    state.appRecords = normalizeAppRecords(recordRow.records);
   } else {
-    state.records = emptyRecords();
+    state.appRecords = emptyAppRecords();
     await persistRecords("已为当前账号创建空云端记录。");
   }
+  state.subject = state.appRecords.activeSubject || DEFAULT_SUBJECT;
+  syncCurrentRecordsReference();
 
   els.accountLabel.textContent = `${profile.display_name || profile.student_id}（${profile.student_id}）`;
   els.adminBtn.hidden = profile.role !== "admin";
   updateLocalRecordActions();
   showAppView();
+  updateSubjectButtons();
   setupSetSelect();
   startSet(state.set);
   setBackupStatus("云端记录已加载。");
@@ -848,7 +972,9 @@ async function logout() {
   if (supabaseClient) await supabaseClient.auth.signOut();
   state.session = null;
   state.profile = null;
-  state.records = emptyRecords();
+  state.appRecords = emptyAppRecords();
+  state.subject = DEFAULT_SUBJECT;
+  syncCurrentRecordsReference();
   showAuthView("已退出登录。");
 }
 
@@ -910,9 +1036,14 @@ async function importLocalRecordsToCurrentAccount() {
     setBackupStatus("学号确认不一致，已取消导入。");
     return;
   }
-  state.records = normalizeRecords(state.localRecords);
+  state.appRecords.subjects.mayuan = normalizeRecords(state.localRecords);
+  state.subject = "mayuan";
+  state.appRecords.activeSubject = "mayuan";
+  syncCurrentRecordsReference();
   rebuildWrongBookFromAttempts();
   await persistRecords("本机旧记录已导入当前账号。");
+  updateSubjectButtons();
+  setupSetSelect();
   render();
 }
 
@@ -1023,6 +1154,10 @@ function bindEvents() {
   els.adminUsers.addEventListener("click", handleAdminUserClick);
   els.sealLocalBtn.addEventListener("click", sealLocalRecords);
   els.importLocalBtn.addEventListener("click", importLocalRecordsToCurrentAccount);
+  els.subjectSwitch.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-subject]");
+    if (button) switchSubject(button.dataset.subject);
+  });
   els.setSelect.addEventListener("change", () => startSet(els.setSelect.value));
   els.setModeBtn.addEventListener("click", () => startSet(state.set));
   els.randomModeBtn.addEventListener("click", startRandom);
