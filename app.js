@@ -4,6 +4,13 @@ const BACKUP_VERSION = 1;
 const QUESTION_BANK_VERSION = "2026-05-28-release";
 const MULTI_SUBJECT_RECORD_VERSION = 2;
 const SET_SIZE = 20;
+const EXAM_COUNT = 5;
+const EXAM_DURATION_SECONDS = 30 * 60;
+const EXAM_RULES = {
+  single_choice: { count: 50, score: 0.5 },
+  multiple_choice: { count: 25, score: 1 },
+  true_false: { count: 20, score: 1 }
+};
 const DEFAULT_SUBJECT = "mayuan";
 const SUBJECTS = {
   mayuan: {
@@ -33,10 +40,14 @@ const supabaseClient = CONFIG.url && CONFIG.anonKey && window.supabase
 const state = {
   mode: "set",
   set: 1,
+  examSet: 1,
   index: 0,
   sessionQuestions: [],
   answered: false,
   selectedAnswer: "",
+  currentResult: null,
+  examSession: null,
+  examTimer: null,
   subject: DEFAULT_SUBJECT,
   appRecords: emptyAppRecords(),
   records: emptyRecords(),
@@ -67,8 +78,11 @@ const els = {
   importBackupBtn: document.querySelector("#importBackupBtn"),
   importBackupInput: document.querySelector("#importBackupInput"),
   subjectSwitch: document.querySelector("#subjectSwitch"),
+  setSelectLabel: document.querySelector("#setSelectLabel"),
   setSelect: document.querySelector("#setSelect"),
   setModeBtn: document.querySelector("#setModeBtn"),
+  examModeBtn: document.querySelector("#examModeBtn"),
+  choiceModeBtn: document.querySelector("#choiceModeBtn"),
   randomModeBtn: document.querySelector("#randomModeBtn"),
   wrongModeBtn: document.querySelector("#wrongModeBtn"),
   accuracyMetric: document.querySelector("#accuracyMetric"),
@@ -115,6 +129,8 @@ function emptyRecords() {
     attempts: [],
     wrongBook: {},
     answerOverrides: {},
+    sessionState: null,
+    examResults: {},
     backupMeta: {
       backupVersion: BACKUP_VERSION,
       questionBankVersion: QUESTION_BANK_VERSION,
@@ -148,6 +164,8 @@ function normalizeRecords(parsed) {
     attempts: Array.isArray(parsed.attempts) ? parsed.attempts : [],
     wrongBook: parsed.wrongBook && typeof parsed.wrongBook === "object" ? parsed.wrongBook : {},
     answerOverrides: parsed.answerOverrides && typeof parsed.answerOverrides === "object" ? parsed.answerOverrides : {},
+    sessionState: parsed.sessionState && typeof parsed.sessionState === "object" ? parsed.sessionState : null,
+    examResults: parsed.examResults && typeof parsed.examResults === "object" ? parsed.examResults : {},
     backupMeta: {
       ...base.backupMeta,
       ...(parsed.backupMeta && typeof parsed.backupMeta === "object" ? parsed.backupMeta : {})
@@ -184,6 +202,90 @@ function getCurrentQuestions() {
   return getCurrentSubject().getQuestions();
 }
 
+function isMayuan() {
+  return state.subject === "mayuan";
+}
+
+function isJunli() {
+  return state.subject === "junli";
+}
+
+function getPracticeGroups() {
+  const questions = getCurrentQuestions();
+  if (isJunli()) {
+    const chapters = [...new Set(questions.map((question) => question.chapter))];
+    return chapters.map((chapter, index) => ({
+      id: String(index + 1),
+      label: chapter,
+      questions: questions.filter((question) => question.chapter === chapter)
+    }));
+  }
+
+  const totalSets = Math.max(1, ...questions.map((question) => question.set));
+  return Array.from({ length: totalSets }, (_, index) => {
+    const setNumber = index + 1;
+    return {
+      id: String(setNumber),
+      label: `第 ${setNumber} 套`,
+      questions: questions.filter((question) => question.set === setNumber)
+    };
+  });
+}
+
+function getAttemptStats() {
+  const stats = new Map();
+  for (const attempt of state.records.attempts) {
+    const old = stats.get(attempt.questionId) || { count: 0, lastTime: "", correct: 0, wrong: 0 };
+    old.count += 1;
+    old.lastTime = attempt.time && attempt.time > old.lastTime ? attempt.time : old.lastTime;
+    if (attempt.correct) old.correct += 1;
+    else old.wrong += 1;
+    stats.set(attempt.questionId, old);
+  }
+  return stats;
+}
+
+function smartPickQuestions(list, count, seed) {
+  const stats = getAttemptStats();
+  const unseen = [];
+  const seen = [];
+  for (const question of list) {
+    if (stats.has(question.id)) seen.push(question);
+    else unseen.push(question);
+  }
+
+  const shuffledUnseen = seededPick(unseen, unseen.length, seed);
+  const sortedSeen = [...seen].sort((left, right) => {
+    const leftStats = stats.get(left.id);
+    const rightStats = stats.get(right.id);
+    return leftStats.count - rightStats.count ||
+      String(leftStats.lastTime || "").localeCompare(String(rightStats.lastTime || "")) ||
+      left.id.localeCompare(right.id);
+  });
+  return [...shuffledUnseen, ...sortedSeen].slice(0, count);
+}
+
+function getQuestionStatus(question) {
+  if (state.records.wrongBook[question.id]) return { label: "错题", className: "wrong" };
+  return state.records.attempts.some((attempt) => attempt.questionId === question.id)
+    ? { label: "已做", className: "done" }
+    : { label: "未做", className: "" };
+}
+
+function buildExamPaper(examSet) {
+  const all = (window.QUESTIONS || []);
+  const seedBase = Number(examSet) * 1009;
+  return [
+    ...seededPick(all.filter((question) => question.type === "single_choice"), EXAM_RULES.single_choice.count, seedBase + 11),
+    ...seededPick(all.filter((question) => question.type === "multiple_choice"), EXAM_RULES.multiple_choice.count, seedBase + 23),
+    ...seededPick(all.filter((question) => question.type === "true_false"), EXAM_RULES.true_false.count, seedBase + 37)
+  ].map((question, index) => ({ ...question, examOrder: index + 1 }));
+}
+
+function getExamMaxScore() {
+  return Object.values(EXAM_RULES).reduce((sum, rule) => sum + rule.count * rule.score, 0);
+}
+
 function syncCurrentRecordsReference() {
   if (!state.appRecords?.subjects) state.appRecords = emptyAppRecords();
   if (!state.appRecords.subjects[state.subject]) state.appRecords.subjects[state.subject] = emptyRecords();
@@ -192,16 +294,23 @@ function syncCurrentRecordsReference() {
 
 function switchSubject(subject, persistChoice = true) {
   if (!SUBJECTS[subject] || subject === state.subject) return;
+  stopExamTimer();
+  saveSessionState();
   state.subject = subject;
   state.appRecords.activeSubject = subject;
   syncCurrentRecordsReference();
   state.set = 1;
+  state.examSet = 1;
+  state.mode = "set";
   state.index = 0;
   state.sessionQuestions = [];
   state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  state.examSession = null;
   updateSubjectButtons();
   setupSetSelect();
-  startSet(state.set);
+  if (!restoreSessionState()) startSet(state.set);
   if (persistChoice) void persistRecords(`${getCurrentSubject().label}记录已同步。`);
 }
 
@@ -209,6 +318,60 @@ function updateSubjectButtons() {
   els.subjectSwitch?.querySelectorAll("[data-subject]").forEach((button) => {
     button.classList.toggle("active", button.dataset.subject === state.subject);
   });
+}
+
+function createSessionState() {
+  return {
+    mode: state.mode,
+    set: state.set,
+    examSet: state.examSet,
+    index: state.index,
+    questionIds: state.sessionQuestions.map((question) => question.id),
+    answered: state.answered,
+    selectedAnswer: state.selectedAnswer,
+    currentResult: state.currentResult,
+    examSession: state.examSession ? {
+      examSet: state.examSession.examSet,
+      startedAt: state.examSession.startedAt,
+      submittedAt: state.examSession.submittedAt || null,
+      answers: state.examSession.answers || {},
+      results: state.examSession.results || {}
+    } : null,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function saveSessionState() {
+  syncCurrentRecordsReference();
+  state.records.sessionState = createSessionState();
+}
+
+function clearSessionState() {
+  syncCurrentRecordsReference();
+  state.records.sessionState = null;
+}
+
+function restoreSessionState() {
+  const saved = state.records.sessionState;
+  if (!saved || !saved.mode || !Array.isArray(saved.questionIds)) return false;
+
+  const questions = saved.questionIds.map(getQuestionById).filter(Boolean);
+  if (!questions.length || questions.length !== saved.questionIds.length) return false;
+
+  state.mode = saved.mode;
+  state.set = Number(saved.set || 1);
+  state.examSet = Number(saved.examSet || 1);
+  state.index = Math.min(Math.max(Number(saved.index || 0), 0), questions.length);
+  state.sessionQuestions = questions;
+  state.answered = Boolean(saved.answered);
+  state.selectedAnswer = saved.selectedAnswer || "";
+  state.currentResult = saved.currentResult || null;
+  state.examSession = saved.examSession || null;
+  setupSetSelect();
+  updateModeButtons();
+  render();
+  startExamTimer();
+  return true;
 }
 
 function loadRecords() {
@@ -292,6 +455,14 @@ async function persistRecords(statusText = "云端记录已同步。") {
   }
 }
 
+function schedulePersistRecords(statusText = "当前进度已保存。") {
+  if (state.syncTimer) clearTimeout(state.syncTimer);
+  state.syncTimer = setTimeout(() => {
+    state.syncTimer = null;
+    void persistRecords(statusText);
+  }, 800);
+}
+
 function normalizeAnswer(value) {
   return String(value || "")
     .toLowerCase()
@@ -309,6 +480,24 @@ function getQuestionById(id) {
 
 function currentQuestion() {
   return state.sessionQuestions[state.index];
+}
+
+function getFormAnswer(question) {
+  const formData = new FormData(els.answerForm);
+  return question.type === "multiple_choice"
+    ? formData.getAll("answer").sort().join("")
+    : question.type === "fill_blank"
+      ? String(formData.get("answer") || "").trim()
+      : String(formData.get("answer") || "");
+}
+
+function captureDraftAnswer() {
+  const question = currentQuestion();
+  if (!question || state.answered) return;
+  state.selectedAnswer = getFormAnswer(question);
+  if (state.mode === "exam" && state.examSession && state.selectedAnswer) {
+    state.examSession.answers[question.id] = state.selectedAnswer;
+  }
 }
 
 function getAnswerSpec(question) {
@@ -344,44 +533,121 @@ function formatAnswer(question) {
 }
 
 function setupSetSelect() {
-  const questions = getCurrentQuestions();
-  const totalSets = Math.max(1, ...questions.map((question) => question.set));
-  els.setSelect.innerHTML = Array.from({ length: totalSets }, (_, index) => {
-    const setNumber = index + 1;
-    return `<option value="${setNumber}">第 ${setNumber} 套</option>`;
+  if (state.mode === "exam") {
+    els.setSelectLabel.textContent = "模拟卷";
+    els.setSelect.innerHTML = Array.from({ length: EXAM_COUNT }, (_, index) => {
+      const examSet = index + 1;
+      const done = state.records.examResults?.[examSet] ? "（已做）" : "";
+      return `<option value="${examSet}">第 ${examSet} 套${done}</option>`;
+    }).join("");
+    els.setSelect.value = String(state.examSet);
+    return;
+  }
+
+  els.setSelectLabel.textContent = isJunli() ? "章节" : "套题";
+  const groups = getPracticeGroups();
+  els.setSelect.innerHTML = groups.map((group) => {
+    const countText = isJunli() ? `（${group.questions.length}题）` : "";
+    return `<option value="${group.id}">${escapeHtml(group.label)}${countText}</option>`;
   }).join("");
-  if (state.set > totalSets) state.set = 1;
+  if (state.set > groups.length) state.set = 1;
   els.setSelect.value = String(state.set);
 }
 
 function startSet(setNumber) {
+  stopExamTimer();
   state.mode = "set";
   state.set = Number(setNumber);
   state.index = 0;
-  state.sessionQuestions = getCurrentQuestions().filter((question) => question.set === state.set);
+  state.examSession = null;
+  state.sessionQuestions = getPracticeGroups()[state.set - 1]?.questions || [];
   state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  setupSetSelect();
   updateModeButtons();
+  saveSessionState();
+  void persistRecords();
   render();
 }
 
 function startRandom() {
+  stopExamTimer();
   state.mode = "random";
   state.index = 0;
-  state.sessionQuestions = seededPick(getCurrentQuestions(), SET_SIZE, Date.now());
+  state.examSession = null;
+  state.sessionQuestions = smartPickQuestions(getCurrentQuestions(), SET_SIZE, Date.now());
   state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  setupSetSelect();
   updateModeButtons();
+  saveSessionState();
+  void persistRecords();
+  render();
+}
+
+function startChoicePractice() {
+  stopExamTimer();
+  state.mode = "choice";
+  state.index = 0;
+  state.examSession = null;
+  state.sessionQuestions = smartPickQuestions(
+    getCurrentQuestions().filter((question) => question.type === "single_choice" || question.type === "multiple_choice"),
+    SET_SIZE,
+    Date.now()
+  );
+  state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  setupSetSelect();
+  updateModeButtons();
+  saveSessionState();
+  void persistRecords();
+  render();
+}
+
+function startExam(examSet = state.examSet) {
+  if (!isMayuan()) return;
+  state.mode = "exam";
+  state.examSet = Number(examSet);
+  state.set = state.examSet;
+  state.index = 0;
+  state.sessionQuestions = buildExamPaper(state.examSet);
+  state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  state.examSession = {
+    examSet: state.examSet,
+    startedAt: new Date().toISOString(),
+    answers: {},
+    results: {},
+    submittedAt: null
+  };
+  setupSetSelect();
+  updateModeButtons();
+  startExamTimer();
+  saveSessionState();
+  void persistRecords();
   render();
 }
 
 function startWrongPractice() {
+  stopExamTimer();
   const wrongIds = Object.values(state.records.wrongBook)
     .sort((left, right) => right.wrongCount - left.wrongCount)
     .map((item) => item.questionId);
   state.mode = "wrong";
   state.index = 0;
+  state.examSession = null;
   state.sessionQuestions = wrongIds.map(getQuestionById).filter(Boolean);
   state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  setupSetSelect();
   updateModeButtons();
+  saveSessionState();
+  void persistRecords();
   render();
 }
 
@@ -396,13 +662,61 @@ function seededPick(list, count, seed) {
 
 function updateModeButtons() {
   els.setModeBtn.classList.toggle("active", state.mode === "set");
+  els.setModeBtn.textContent = isJunli() ? "章节练习" : "套题练习";
+  els.examModeBtn.hidden = !isMayuan();
+  els.examModeBtn.classList.toggle("active", state.mode === "exam");
+  els.choiceModeBtn.hidden = !isJunli();
+  els.choiceModeBtn.classList.toggle("active", state.mode === "choice");
   els.randomModeBtn.classList.toggle("active", state.mode === "random");
   els.wrongModeBtn.classList.toggle("active", state.mode === "wrong");
   els.modeText.textContent = state.mode === "set"
-    ? getCurrentSubject().setModeText(state.set)
-    : state.mode === "random"
-      ? getCurrentSubject().randomText(getCurrentQuestions().length)
-      : getCurrentSubject().wrongText;
+    ? isJunli()
+      ? `军理 · 正在练习${getPracticeGroups()[state.set - 1]?.label || "章节"}。`
+      : getCurrentSubject().setModeText(state.set)
+    : state.mode === "exam"
+      ? `马原 · 第 ${state.examSet} 套模拟考试，满分 ${getExamMaxScore()} 分，限时 30 分钟。`
+      : state.mode === "choice"
+        ? "军理 · 选择题专项只抽单选和多选，优先出现未做题。"
+        : state.mode === "random"
+          ? getCurrentSubject().randomText(getCurrentQuestions().length)
+          : getCurrentSubject().wrongText;
+}
+
+function getExamRemainingSeconds() {
+  if (!state.examSession?.startedAt || state.examSession.submittedAt) return 0;
+  const elapsed = Math.floor((Date.now() - new Date(state.examSession.startedAt).getTime()) / 1000);
+  return Math.max(0, EXAM_DURATION_SECONDS - elapsed);
+}
+
+function formatDuration(seconds) {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(safe / 60);
+  const rest = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+function stopExamTimer() {
+  if (state.examTimer) {
+    clearInterval(state.examTimer);
+    state.examTimer = null;
+  }
+}
+
+function startExamTimer() {
+  stopExamTimer();
+  if (state.mode !== "exam" || state.examSession?.submittedAt) return;
+  state.examTimer = setInterval(() => {
+    if (state.mode !== "exam" || !state.examSession || state.examSession.submittedAt) {
+      stopExamTimer();
+      return;
+    }
+    if (getExamRemainingSeconds() <= 0) {
+      finishExam(true);
+      return;
+    }
+    renderStats();
+    updateModeButtons();
+  }, 1000);
 }
 
 function render() {
@@ -415,35 +729,69 @@ function renderQuestion() {
   const question = currentQuestion();
   els.feedback.hidden = true;
   els.feedback.className = "feedback";
-  els.submitBtn.disabled = false;
-  els.nextBtn.disabled = true;
+  els.submitBtn.disabled = Boolean(state.answered);
+  els.nextBtn.disabled = !state.answered;
   els.masteredBtn.hidden = true;
   els.editAnswerBtn.disabled = !question;
-  state.answered = false;
-  state.selectedAnswer = "";
 
   if (!question) {
     els.priorityBadge.textContent = "DONE";
     els.priorityBadge.className = "badge black";
     els.chapterLabel.textContent = "";
     els.progressLabel.textContent = "0/0";
-    els.questionTitle.textContent = state.mode === "wrong" ? "错题本暂时是空的" : "本轮练习已完成";
+    els.questionTitle.textContent = state.mode === "wrong"
+      ? "错题本暂时是空的"
+      : state.mode === "exam"
+        ? "模拟考试已完成"
+        : "本轮练习已完成";
     els.questionPrompt.textContent = state.mode === "wrong"
       ? "继续刷套题或随机练习，答错的题会自动进入这里。"
-      : "可以换一套继续刷，或者进入错题重刷。";
+      : state.mode === "exam"
+        ? "可以查看本次模拟考试成绩，或切换另一套模拟卷。"
+        : "可以换一套继续刷，或者进入错题重刷。";
     els.answerForm.innerHTML = "";
     els.submitBtn.disabled = true;
+    els.nextBtn.disabled = true;
     return;
   }
 
   const spec = getAnswerSpec(question);
+  const status = getQuestionStatus(question);
+  const statusHtml = `<span class="question-tags"><span class="status-tag ${status.className}">${status.label}</span></span>`;
   els.priorityBadge.textContent = priorityText(question.priority);
   els.priorityBadge.className = `badge ${question.priority}`;
-  els.chapterLabel.textContent = spec.edited ? `${question.chapter} · 已手动修正答案` : question.chapter;
-  els.progressLabel.textContent = `${state.index + 1}/${state.sessionQuestions.length}`;
+  els.chapterLabel.innerHTML = `${escapeHtml(spec.edited ? `${question.chapter} · 已手动修正答案` : question.chapter)}${statusHtml}`;
+  els.progressLabel.textContent = state.mode === "exam"
+    ? `${state.index + 1}/${state.sessionQuestions.length} · ${formatDuration(getExamRemainingSeconds())}`
+    : `${state.index + 1}/${state.sessionQuestions.length}`;
   els.questionTitle.textContent = `${question.title} · ${typeText(question.type)}`;
   els.questionPrompt.textContent = question.prompt;
   els.answerForm.innerHTML = question.type === "fill_blank" ? renderFillInput() : renderOptions(question);
+  applySelectedAnswer(question);
+  if (state.answered && state.currentResult) {
+    showFeedback(state.currentResult.correct, state.currentResult.label, question);
+    els.submitBtn.disabled = true;
+    els.nextBtn.disabled = false;
+    els.masteredBtn.hidden = !state.records.wrongBook[question.id];
+  }
+}
+
+function applySelectedAnswer(question) {
+  if (!state.selectedAnswer) return;
+  if (question.type === "fill_blank") {
+    const input = els.answerForm.querySelector("[name='answer']");
+    if (input) input.value = state.selectedAnswer;
+    return;
+  }
+  if (question.type === "multiple_choice") {
+    const selected = normalizeChoiceAnswer(state.selectedAnswer);
+    els.answerForm.querySelectorAll("[name='answer']").forEach((input) => {
+      input.checked = selected.includes(input.value);
+    });
+    return;
+  }
+  const input = els.answerForm.querySelector(`[name='answer'][value="${CSS.escape(state.selectedAnswer)}"]`);
+  if (input) input.checked = true;
 }
 
 function renderOptions(question) {
@@ -477,12 +825,7 @@ function submitAnswer() {
   const question = currentQuestion();
   if (!question || state.answered) return;
 
-  const formData = new FormData(els.answerForm);
-  const answer = question.type === "multiple_choice"
-    ? formData.getAll("answer").sort().join("")
-    : question.type === "fill_blank"
-    ? String(formData.get("answer") || "").trim()
-    : String(formData.get("answer") || "");
+  const answer = getFormAnswer(question);
 
   if (!answer) {
     showFeedback(false, "先写一个答案再提交。", question);
@@ -492,11 +835,26 @@ function submitAnswer() {
   const correct = isCorrect(question, answer);
   state.selectedAnswer = answer;
   state.answered = true;
+  state.currentResult = { correct, label: correct ? "答对了" : "答错了" };
   recordAttempt(question, answer, correct);
+  if (state.mode === "exam" && state.examSession) {
+    state.examSession.answers[question.id] = answer;
+    state.examSession.results[question.id] = {
+      answer,
+      correct,
+      score: getQuestionScore(question, correct),
+      type: question.type
+    };
+    state.currentResult.label = correct
+      ? `已记录：答对了，本题 ${getQuestionScore(question, correct)} 分`
+      : "已记录：答错了，本题 0 分";
+  }
   showFeedback(correct, correct ? "答对了" : "答错了", question);
+  if (state.mode === "exam") showFeedback(correct, state.currentResult.label, question);
   els.submitBtn.disabled = true;
   els.nextBtn.disabled = false;
   els.masteredBtn.hidden = !state.records.wrongBook[question.id];
+  saveSessionState();
   void persistRecords();
   renderStats();
   renderWrongBook();
@@ -533,6 +891,70 @@ function recordAttempt(question, answer, correct) {
   }
 
   upsertWrongBookItem(question);
+}
+
+function getQuestionScore(question, correct) {
+  if (!correct) return 0;
+  return EXAM_RULES[question.type]?.score || 0;
+}
+
+function calculateExamResult(autoSubmitted = false) {
+  const answers = state.examSession?.answers || {};
+  const rows = state.sessionQuestions.map((question) => {
+    const answer = answers[question.id] || "";
+    const correct = answer ? isCorrect(question, answer) : false;
+    return {
+      questionId: question.id,
+      type: question.type,
+      answer,
+      correct,
+      score: getQuestionScore(question, correct)
+    };
+  });
+  const score = rows.reduce((sum, row) => sum + row.score, 0);
+  const submittedAt = new Date().toISOString();
+  const startedAt = state.examSession?.startedAt || submittedAt;
+  const usedSeconds = Math.min(EXAM_DURATION_SECONDS, Math.max(0, Math.floor((new Date(submittedAt) - new Date(startedAt)) / 1000)));
+  return {
+    examSet: state.examSet,
+    score,
+    maxScore: getExamMaxScore(),
+    usedSeconds,
+    autoSubmitted,
+    submittedAt,
+    startedAt,
+    answers: rows
+  };
+}
+
+function finishExam(autoSubmitted = false) {
+  if (state.mode !== "exam" || !state.examSession || state.examSession.submittedAt) return;
+  captureDraftAnswer();
+  stopExamTimer();
+  const result = calculateExamResult(autoSubmitted);
+  state.examSession.submittedAt = result.submittedAt;
+  state.records.examResults[state.examSet] = result;
+  state.index = state.sessionQuestions.length;
+  state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  clearSessionState();
+  void persistRecords(autoSubmitted ? "时间到，模拟考试已自动交卷。" : "模拟考试已交卷。");
+  setupSetSelect();
+  render();
+  showExamResult(result);
+}
+
+function showExamResult(result) {
+  els.feedback.hidden = false;
+  els.feedback.className = "feedback correct";
+  els.feedback.innerHTML = `
+    <div class="exam-summary">
+      <strong>第 ${escapeHtml(result.examSet)} 套：${escapeHtml(result.score)} / ${escapeHtml(result.maxScore)} 分</strong>
+      <div>用时：${escapeHtml(formatDuration(result.usedSeconds))}${result.autoSubmitted ? " · 时间到自动交卷" : ""}</div>
+      <div>单选 50 题每题 0.5 分，多选 25 题每题 1 分，判断 20 题每题 1 分。</div>
+    </div>
+  `;
 }
 
 function upsertWrongBookItem(question) {
@@ -586,11 +1008,25 @@ function showFeedback(correct, label, question) {
 }
 
 function nextQuestion() {
+  if (state.mode === "exam" && state.index >= state.sessionQuestions.length - 1) {
+    finishExam(false);
+    return;
+  }
   if (state.index < state.sessionQuestions.length - 1) {
     state.index += 1;
+    state.answered = false;
+    state.selectedAnswer = "";
+    state.currentResult = null;
+    saveSessionState();
+    void persistRecords();
     renderQuestion();
   } else {
     state.index += 1;
+    state.answered = false;
+    state.selectedAnswer = "";
+    state.currentResult = null;
+    saveSessionState();
+    void persistRecords();
     render();
   }
 }
@@ -938,8 +1374,11 @@ async function loadAccount(session) {
   updateLocalRecordActions();
   showAppView();
   updateSubjectButtons();
-  setupSetSelect();
-  startSet(state.set);
+  if (!restoreSessionState()) {
+    state.mode = "set";
+    setupSetSelect();
+    startSet(state.set);
+  }
   setBackupStatus("云端记录已加载。");
 }
 
@@ -1158,8 +1597,13 @@ function bindEvents() {
     const button = event.target.closest("[data-subject]");
     if (button) switchSubject(button.dataset.subject);
   });
-  els.setSelect.addEventListener("change", () => startSet(els.setSelect.value));
+  els.setSelect.addEventListener("change", () => {
+    if (state.mode === "exam") startExam(els.setSelect.value);
+    else startSet(els.setSelect.value);
+  });
   els.setModeBtn.addEventListener("click", () => startSet(state.set));
+  els.examModeBtn.addEventListener("click", () => startExam(state.examSet));
+  els.choiceModeBtn.addEventListener("click", startChoicePractice);
   els.randomModeBtn.addEventListener("click", startRandom);
   els.wrongModeBtn.addEventListener("click", startWrongPractice);
   els.submitBtn.addEventListener("click", submitAnswer);
@@ -1183,6 +1627,18 @@ function bindEvents() {
       if (!state.answered) submitAnswer();
       else nextQuestion();
     }
+  });
+  els.answerForm.addEventListener("input", () => {
+    if (!currentQuestion() || state.answered) return;
+    captureDraftAnswer();
+    saveSessionState();
+    schedulePersistRecords();
+  });
+  els.answerForm.addEventListener("change", () => {
+    if (!currentQuestion() || state.answered) return;
+    captureDraftAnswer();
+    saveSessionState();
+    schedulePersistRecords();
   });
 }
 

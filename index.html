@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>至尊刷题系统</title>
-    <link rel="stylesheet" href="styles.css?v=20260613-subjects">
+    <link rel="stylesheet" href="styles.css?v=20260615-practice-upgrade">
   </head>
   <body>
     <section id="authView" class="auth-shell" aria-label="登录">
@@ -58,11 +58,13 @@
           </div>
         </div>
         <div class="field">
-          <label for="setSelect">套题</label>
+          <label id="setSelectLabel" for="setSelect">套题</label>
           <select id="setSelect"></select>
         </div>
         <div class="segmented" role="group" aria-label="练习入口">
           <button id="setModeBtn" class="active" type="button">套题练习</button>
+          <button id="examModeBtn" type="button">模拟考试</button>
+          <button id="choiceModeBtn" type="button" hidden>选择题专项</button>
           <button id="randomModeBtn" type="button">随机练习</button>
           <button id="wrongModeBtn" type="button">错题重刷</button>
         </div>
@@ -178,10 +180,10 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=20260613-subjects"></script>
-    <script src="questions.js?v=20260613-subjects"></script>
-    <script src="supplemental_questions.js?v=20260613-subjects"></script>
-    <script src="military_questions.js?v=20260613-subjects"></script>
-    <script src="app.js?v=20260613-subjects"></script>
+    <script src="config.js?v=20260615-practice-upgrade"></script>
+    <script src="questions.js?v=20260615-practice-upgrade"></script>
+    <script src="supplemental_questions.js?v=20260615-practice-upgrade"></script>
+    <script src="military_questions.js?v=20260615-practice-upgrade"></script>
+    <script src="app.js?v=20260615-practice-upgrade"></script>
   </body>
 </html>
