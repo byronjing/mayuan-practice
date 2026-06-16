@@ -1503,28 +1503,55 @@ function openAdminDialog() {
 
 async function refreshAdminUsers() {
   try {
-    setStatus(els.adminStatus, "正在加载账号...");
-    const data = await invokeAdmin("list");
+    setStatus(els.adminStatus, "正在加载账号与刷题进度...");
+    const data = await invokeAdmin("usageSummary");
     renderAdminUsers(data.users || []);
-    setStatus(els.adminStatus, `已加载 ${data.users?.length || 0} 个账号。`, "ok");
+    setStatus(els.adminStatus, `已加载 ${data.users?.length || 0} 个账号，${data.totalRecords || 0} 条云端记录。`, "ok");
   } catch (error) {
     setStatus(els.adminStatus, error.message || "加载失败。", "error");
   }
 }
 
+function formatAdminTime(value) {
+  if (!value) return "无";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "无";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function formatSubjectUsage(label, usage = {}) {
+  return `
+    <span>${label}：${usage.attempts || 0}题 · 正确率${usage.accuracy || 0}% · 错题${usage.wrongBook || 0} · 修正${usage.answerOverrides || 0}${usage.examsDone ? ` · 模拟${usage.examsDone}` : ""}</span>
+  `;
+}
+
 function renderAdminUsers(users) {
-  els.adminUsers.innerHTML = users.length ? users.map((user) => `
+  els.adminUsers.innerHTML = users.length ? users.map((user) => {
+    const mayuan = user.usage?.subjects?.mayuan || {};
+    const junli = user.usage?.subjects?.junli || {};
+    return `
     <div class="admin-user">
       <div>
         <strong>${escapeHtml(user.student_id)}${user.display_name ? ` · ${escapeHtml(user.display_name)}` : ""}</strong>
         <span>${user.role === "admin" ? "管理员" : "普通账号"} · ${user.is_active ? "已启用" : "已停用"}</span>
+        <div class="admin-user-progress">
+          ${formatSubjectUsage("马原", mayuan)}
+          ${formatSubjectUsage("军理", junli)}
+          <span>最近使用：${escapeHtml(formatAdminTime(user.usage?.latest))}${user.has_record ? "" : " · 尚无云端记录"}</span>
+        </div>
       </div>
       <div class="admin-user-actions">
         <button type="button" data-admin-action="reset" data-student-id="${escapeHtml(user.student_id)}">重置密码</button>
         <button type="button" data-admin-action="toggle" data-student-id="${escapeHtml(user.student_id)}" data-active="${user.is_active ? "true" : "false"}">${user.is_active ? "停用" : "启用"}</button>
       </div>
     </div>
-  `).join("") : '<p class="empty">还没有账号。</p>';
+  `;
+  }).join("") : '<p class="empty">还没有账号。</p>';
 }
 
 async function createAdminUser() {

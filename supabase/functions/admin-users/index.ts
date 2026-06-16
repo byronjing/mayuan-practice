@@ -11,12 +11,105 @@ const emptyRecords = {
   attempts: [],
   wrongBook: {},
   answerOverrides: {},
+  sessionState: null,
+  examResults: {},
   backupMeta: {
     backupVersion: 1,
     questionBankVersion: "2026-05-28-release",
     updatedAt: null
   }
 };
+
+const subjectKeys = ["mayuan", "junli"];
+
+function emptySubjectRecords() {
+  return {
+    attempts: [],
+    wrongBook: {},
+    answerOverrides: {},
+    sessionState: null,
+    examResults: {}
+  };
+}
+
+function normalizeSubjectRecords(records: unknown) {
+  const base = emptySubjectRecords();
+  if (!records || typeof records !== "object") return base;
+  const source = records as Record<string, unknown>;
+  return {
+    attempts: Array.isArray(source.attempts) ? source.attempts : [],
+    wrongBook: source.wrongBook && typeof source.wrongBook === "object" ? source.wrongBook as Record<string, unknown> : {},
+    answerOverrides: source.answerOverrides && typeof source.answerOverrides === "object" ? source.answerOverrides as Record<string, unknown> : {},
+    sessionState: source.sessionState && typeof source.sessionState === "object" ? source.sessionState : null,
+    examResults: source.examResults && typeof source.examResults === "object" ? source.examResults as Record<string, unknown> : {}
+  };
+}
+
+function normalizeAppRecords(records: unknown) {
+  const subjects: Record<string, ReturnType<typeof emptySubjectRecords>> = Object.fromEntries(
+    subjectKeys.map((subject) => [subject, emptySubjectRecords()])
+  );
+  if (!records || typeof records !== "object") return { subjects };
+
+  const source = records as Record<string, unknown>;
+  if (source.subjects && typeof source.subjects === "object") {
+    const sourceSubjects = source.subjects as Record<string, unknown>;
+    for (const subject of subjectKeys) {
+      subjects[subject] = normalizeSubjectRecords(sourceSubjects[subject]);
+    }
+    return { subjects };
+  }
+
+  subjects.mayuan = normalizeSubjectRecords(source);
+  return { subjects };
+}
+
+function summarizeSubject(records: ReturnType<typeof normalizeSubjectRecords>) {
+  const attempts = records.attempts as Array<Record<string, unknown>>;
+  const correct = attempts.filter((attempt) => Boolean(attempt.correct)).length;
+  const latestAttempt = attempts
+    .map((attempt) => String(attempt.createdAt || attempt.submittedAt || ""))
+    .filter(Boolean)
+    .sort()
+    .at(-1) || null;
+  const latestExam = Object.values(records.examResults)
+    .map((exam) => {
+      if (!exam || typeof exam !== "object") return "";
+      return String((exam as Record<string, unknown>).submittedAt || "");
+    })
+    .filter(Boolean)
+    .sort()
+    .at(-1) || null;
+  const latest = [latestAttempt, latestExam].filter(Boolean).sort().at(-1) || null;
+
+  return {
+    attempts: attempts.length,
+    correct,
+    accuracy: attempts.length ? Math.round((correct / attempts.length) * 100) : 0,
+    wrongBook: Object.keys(records.wrongBook).length,
+    answerOverrides: Object.keys(records.answerOverrides).length,
+    examsDone: Object.keys(records.examResults).length,
+    hasSession: Boolean(records.sessionState),
+    latest
+  };
+}
+
+function summarizeRecords(records: unknown, updatedAt: string | null) {
+  const normalized = normalizeAppRecords(records);
+  const subjects: Record<string, ReturnType<typeof summarizeSubject>> = Object.fromEntries(
+    subjectKeys.map((subject) => [
+      subject,
+      summarizeSubject(normalized.subjects[subject])
+    ])
+  );
+  const latest = Object.values(subjects)
+    .map((subject) => subject.latest)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || updatedAt;
+
+  return { subjects, latest, updatedAt };
+}
 
 function getSecretKey() {
   const secretKeys = Deno.env.get("SUPABASE_SECRET_KEYS");
@@ -82,6 +175,39 @@ serve(async (req) => {
         .order("student_id", { ascending: true });
       if (error) throw error;
       return jsonResponse({ users: data || [] });
+    }
+
+    if (action === "usageSummary") {
+      const { data: users, error: usersError } = await adminClient
+        .from("app_users")
+        .select("user_id,student_id,display_name,role,is_active,created_at")
+        .order("student_id", { ascending: true });
+      if (usersError) throw usersError;
+
+      const { data: records, error: recordsError } = await adminClient
+        .from("practice_records")
+        .select("user_id,records,updated_at");
+      if (recordsError) throw recordsError;
+
+      const recordsByUser = new Map((records || []).map((row) => [row.user_id, row]));
+      const summaries = (users || []).map((user) => {
+        const recordRow = recordsByUser.get(user.user_id);
+        return {
+          student_id: user.student_id,
+          display_name: user.display_name,
+          role: user.role,
+          is_active: user.is_active,
+          created_at: user.created_at,
+          has_record: Boolean(recordRow),
+          usage: summarizeRecords(recordRow?.records || null, recordRow?.updated_at || null)
+        };
+      });
+
+      return jsonResponse({
+        users: summaries,
+        totalUsers: summaries.length,
+        totalRecords: records?.length || 0
+      });
     }
 
     if (action === "create") {
