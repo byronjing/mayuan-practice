@@ -24,7 +24,7 @@ const SUBJECTS = {
   junli: {
     label: "军理",
     getQuestions: () => window.MILITARY_QUESTIONS || [],
-    bankVersion: "junli-2026-06-13",
+    bankVersion: "junli-2025-docx-20260621",
     setModeText: (set) => `军理 · 正在练习第 ${set} 套。题目来自军事理论题库。`,
     randomText: (count) => `军理 · 随机练习会从 ${count} 题中抽取 20 题，适合考前快速过题。`,
     wrongText: "军理 · 错题重刷只使用军理错题本，不会混入马原。"
@@ -48,6 +48,10 @@ const state = {
   currentResult: null,
   examSession: null,
   examTimer: null,
+  wrongReviewSelection: new Set(),
+  wrongReviewKnowledgeOpen: new Set(),
+  wrongReviewFilter: "all",
+  wrongReviewSession: null,
   subject: DEFAULT_SUBJECT,
   appRecords: emptyAppRecords(),
   records: emptyRecords(),
@@ -131,6 +135,7 @@ function emptyRecords() {
     answerOverrides: {},
     sessionState: null,
     examResults: {},
+    wrongReviewResults: [],
     backupMeta: {
       backupVersion: BACKUP_VERSION,
       questionBankVersion: QUESTION_BANK_VERSION,
@@ -166,6 +171,7 @@ function normalizeRecords(parsed) {
     answerOverrides: parsed.answerOverrides && typeof parsed.answerOverrides === "object" ? parsed.answerOverrides : {},
     sessionState: parsed.sessionState && typeof parsed.sessionState === "object" ? parsed.sessionState : null,
     examResults: parsed.examResults && typeof parsed.examResults === "object" ? parsed.examResults : {},
+    wrongReviewResults: Array.isArray(parsed.wrongReviewResults) ? parsed.wrongReviewResults : [],
     backupMeta: {
       ...base.backupMeta,
       ...(parsed.backupMeta && typeof parsed.backupMeta === "object" ? parsed.backupMeta : {})
@@ -286,6 +292,13 @@ function getExamMaxScore() {
   return Object.values(EXAM_RULES).reduce((sum, rule) => sum + rule.count * rule.score, 0);
 }
 
+function resetWrongReviewState() {
+  state.wrongReviewSelection = new Set();
+  state.wrongReviewKnowledgeOpen = new Set();
+  state.wrongReviewFilter = "all";
+  state.wrongReviewSession = null;
+}
+
 function syncCurrentRecordsReference() {
   if (!state.appRecords?.subjects) state.appRecords = emptyAppRecords();
   if (!state.appRecords.subjects[state.subject]) state.appRecords.subjects[state.subject] = emptyRecords();
@@ -308,6 +321,7 @@ function switchSubject(subject, persistChoice = true) {
   state.selectedAnswer = "";
   state.currentResult = null;
   state.examSession = null;
+  resetWrongReviewState();
   updateSubjectButtons();
   setupSetSelect();
   if (!restoreSessionState()) startSet(state.set);
@@ -330,6 +344,9 @@ function createSessionState() {
     answered: state.answered,
     selectedAnswer: state.selectedAnswer,
     currentResult: state.currentResult,
+    wrongReviewSelection: [...state.wrongReviewSelection],
+    wrongReviewFilter: state.wrongReviewFilter,
+    wrongReviewSession: state.wrongReviewSession,
     examSession: state.examSession ? {
       examSet: state.examSession.examSet,
       startedAt: state.examSession.startedAt,
@@ -343,6 +360,10 @@ function createSessionState() {
 
 function saveSessionState() {
   syncCurrentRecordsReference();
+  if (state.mode === "wrong" && state.wrongReviewSession?.completedAt) {
+    state.records.sessionState = null;
+    return;
+  }
   state.records.sessionState = createSessionState();
 }
 
@@ -355,8 +376,36 @@ function restoreSessionState() {
   const saved = state.records.sessionState;
   if (!saved || !saved.mode || !Array.isArray(saved.questionIds)) return false;
 
+  state.wrongReviewSelection = new Set(Array.isArray(saved.wrongReviewSelection) ? saved.wrongReviewSelection : []);
+  state.wrongReviewFilter = saved.wrongReviewFilter || "all";
+  state.wrongReviewSession = saved.wrongReviewSession || null;
+
+  if (saved.mode === "wrong-select") {
+    state.mode = "wrong-select";
+    state.index = 0;
+    state.sessionQuestions = [];
+    state.answered = false;
+    state.selectedAnswer = "";
+    state.currentResult = null;
+    state.examSession = null;
+    setupSetSelect();
+    updateModeButtons();
+    render();
+    return true;
+  }
+
   const questions = saved.questionIds.map(getQuestionById).filter(Boolean);
-  if (!questions.length || questions.length !== saved.questionIds.length) return false;
+  if (!questions.length) return false;
+  if (saved.mode !== "wrong" && questions.length !== saved.questionIds.length) return false;
+  if (saved.mode === "wrong" && state.wrongReviewSession?.selectedIds?.length) {
+    const validSelectedIds = state.wrongReviewSession.selectedIds.filter((questionId) => getQuestionById(questionId));
+    if (!validSelectedIds.length) return false;
+    state.wrongReviewSession.selectedIds = validSelectedIds;
+    state.wrongReviewSession.results = Object.fromEntries(validSelectedIds.map((questionId) => [
+      questionId,
+      state.wrongReviewSession.results?.[questionId] || []
+    ]));
+  }
 
   state.mode = saved.mode;
   state.set = Number(saved.set || 1);
@@ -533,6 +582,8 @@ function formatAnswer(question) {
 }
 
 function setupSetSelect() {
+  els.setSelect.disabled = false;
+
   if (state.mode === "exam") {
     els.setSelectLabel.textContent = "模拟卷";
     els.setSelect.innerHTML = Array.from({ length: EXAM_COUNT }, (_, index) => {
@@ -541,6 +592,13 @@ function setupSetSelect() {
       return `<option value="${examSet}">第 ${examSet} 套${done}</option>`;
     }).join("");
     els.setSelect.value = String(state.examSet);
+    return;
+  }
+
+  if (state.mode === "wrong-select" || state.mode === "wrong") {
+    els.setSelectLabel.textContent = "错题";
+    els.setSelect.innerHTML = `<option>${state.mode === "wrong-select" ? "选择本次重刷题目" : "本次重刷"}</option>`;
+    els.setSelect.disabled = true;
     return;
   }
 
@@ -564,6 +622,7 @@ function startSet(setNumber) {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  resetWrongReviewState();
   setupSetSelect();
   updateModeButtons();
   saveSessionState();
@@ -580,6 +639,7 @@ function startRandom() {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  resetWrongReviewState();
   setupSetSelect();
   updateModeButtons();
   saveSessionState();
@@ -600,6 +660,7 @@ function startChoicePractice() {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  resetWrongReviewState();
   setupSetSelect();
   updateModeButtons();
   saveSessionState();
@@ -617,6 +678,7 @@ function startExam(examSet = state.examSet) {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  resetWrongReviewState();
   state.examSession = {
     examSet: state.examSet,
     startedAt: new Date().toISOString(),
@@ -634,20 +696,108 @@ function startExam(examSet = state.examSet) {
 
 function startWrongPractice() {
   stopExamTimer();
-  const wrongIds = Object.values(state.records.wrongBook)
-    .sort((left, right) => right.wrongCount - left.wrongCount)
-    .map((item) => item.questionId);
-  state.mode = "wrong";
+  state.mode = "wrong-select";
   state.index = 0;
   state.examSession = null;
-  state.sessionQuestions = wrongIds.map(getQuestionById).filter(Boolean);
+  state.sessionQuestions = [];
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  state.wrongReviewSession = null;
+  state.wrongReviewSelection = new Set();
+  state.wrongReviewKnowledgeOpen = new Set();
+  state.wrongReviewFilter = "all";
   setupSetSelect();
   updateModeButtons();
   saveSessionState();
   void persistRecords();
+  render();
+}
+
+function sortedWrongItems() {
+  return Object.values(state.records.wrongBook)
+    .filter((item) => getQuestionById(item.questionId))
+    .sort((left, right) => right.wrongCount - left.wrongCount || String(right.lastWrong || "").localeCompare(String(left.lastWrong || "")));
+}
+
+function visibleWrongReviewItems() {
+  return sortedWrongItems().filter((item) => state.wrongReviewFilter === "all" || item.priority === state.wrongReviewFilter);
+}
+
+function startSelectedWrongReview() {
+  const selectedIds = sortedWrongItems()
+    .map((item) => item.questionId)
+    .filter((questionId) => state.wrongReviewSelection.has(questionId));
+  const questions = selectedIds.map(getQuestionById).filter(Boolean);
+  if (!questions.length) {
+    showFeedback(false, "请先选择至少一道错题。", { answer: "", keywords: [], explanation: "勾选错题后再开始本次重刷。", sourcePoint: "", type: "fill_blank" });
+    return;
+  }
+
+  state.mode = "wrong";
+  state.index = 0;
+  state.sessionQuestions = [...questions, ...questions];
+  state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  state.examSession = null;
+  state.wrongReviewSession = {
+    selectedIds: questions.map((question) => question.id),
+    roundCount: 2,
+    results: Object.fromEntries(questions.map((question) => [question.id, []])),
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    summary: null
+  };
+  setupSetSelect();
+  updateModeButtons();
+  saveSessionState();
+  void persistRecords("错题重刷已开始。");
+  render();
+}
+
+function recordWrongReviewAnswer(question, correct) {
+  if (state.mode !== "wrong" || !state.wrongReviewSession?.selectedIds?.length) return;
+  const groupSize = state.wrongReviewSession.selectedIds.length;
+  const roundIndex = Math.floor(state.index / groupSize);
+  const results = state.wrongReviewSession.results[question.id] || [];
+  results[roundIndex] = Boolean(correct);
+  state.wrongReviewSession.results[question.id] = results;
+}
+
+function finishWrongReview() {
+  if (state.mode !== "wrong" || !state.wrongReviewSession || state.wrongReviewSession.completedAt) return;
+
+  const selectedIds = state.wrongReviewSession.selectedIds || [];
+  const questionResults = selectedIds.map((questionId) => {
+    const results = state.wrongReviewSession.results[questionId] || [];
+    const mastered = results.length >= 2 && results.slice(0, 2).every(Boolean);
+    if (mastered) delete state.records.wrongBook[questionId];
+    return { questionId, results: results.slice(0, 2).map(Boolean), mastered };
+  });
+  const removed = questionResults.filter((item) => item.mastered).length;
+  const completedAt = new Date().toISOString();
+  const summary = {
+    total: selectedIds.length,
+    removed,
+    kept: selectedIds.length - removed,
+    startedAt: state.wrongReviewSession.startedAt,
+    completedAt,
+    questionResults
+  };
+
+  state.wrongReviewSession.completedAt = completedAt;
+  state.wrongReviewSession.summary = summary;
+  state.records.wrongReviewResults = [
+    summary,
+    ...(Array.isArray(state.records.wrongReviewResults) ? state.records.wrongReviewResults : [])
+  ].slice(0, 20);
+  state.index = state.sessionQuestions.length;
+  state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  clearSessionState();
+  void persistRecords("错题重刷已结束，错题本已更新。");
   render();
 }
 
@@ -668,7 +818,7 @@ function updateModeButtons() {
   els.choiceModeBtn.hidden = !isJunli();
   els.choiceModeBtn.classList.toggle("active", state.mode === "choice");
   els.randomModeBtn.classList.toggle("active", state.mode === "random");
-  els.wrongModeBtn.classList.toggle("active", state.mode === "wrong");
+  els.wrongModeBtn.classList.toggle("active", state.mode === "wrong" || state.mode === "wrong-select");
   els.modeText.textContent = state.mode === "set"
     ? isJunli()
       ? `军理 · 正在练习${getPracticeGroups()[state.set - 1]?.label || "章节"}。`
@@ -679,7 +829,9 @@ function updateModeButtons() {
         ? "军理 · 选择题专项只抽单选和多选，优先出现未做题。"
         : state.mode === "random"
           ? getCurrentSubject().randomText(getCurrentQuestions().length)
-          : getCurrentSubject().wrongText;
+          : state.mode === "wrong-select"
+            ? `${getCurrentSubject().label} · 先选择本次要重刷的错题，再组成两轮重刷组。`
+            : getCurrentSubject().wrongText;
 }
 
 function getExamRemainingSeconds() {
@@ -729,10 +881,20 @@ function renderQuestion() {
   const question = currentQuestion();
   els.feedback.hidden = true;
   els.feedback.className = "feedback";
+  els.submitBtn.hidden = false;
+  els.nextBtn.hidden = false;
+  els.editAnswerBtn.hidden = false;
+  els.submitBtn.textContent = "提交答案";
+  els.nextBtn.textContent = "下一题";
   els.submitBtn.disabled = Boolean(state.answered);
   els.nextBtn.disabled = !state.answered;
   els.masteredBtn.hidden = true;
   els.editAnswerBtn.disabled = !question;
+
+  if (state.mode === "wrong-select") {
+    renderWrongReviewSelection();
+    return;
+  }
 
   if (!question) {
     els.priorityBadge.textContent = "DONE";
@@ -740,18 +902,23 @@ function renderQuestion() {
     els.chapterLabel.textContent = "";
     els.progressLabel.textContent = "0/0";
     els.questionTitle.textContent = state.mode === "wrong"
-      ? "错题本暂时是空的"
+      ? state.wrongReviewSession?.summary ? "本次错题重刷已完成" : "错题本暂时是空的"
       : state.mode === "exam"
         ? "模拟考试已完成"
         : "本轮练习已完成";
     els.questionPrompt.textContent = state.mode === "wrong"
-      ? "继续刷套题或随机练习，答错的题会自动进入这里。"
+      ? state.wrongReviewSession?.summary ? "两轮都答对的题目已经自动移出错题本，任一轮答错的题目会继续保留。" : "继续刷套题或随机练习，答错的题会自动进入这里。"
       : state.mode === "exam"
         ? "可以查看本次模拟考试成绩，或切换另一套模拟卷。"
         : "可以换一套继续刷，或者进入错题重刷。";
-    els.answerForm.innerHTML = "";
+    els.answerForm.innerHTML = state.mode === "wrong" && state.wrongReviewSession?.summary
+      ? renderWrongReviewSummary(state.wrongReviewSession.summary)
+      : "";
     els.submitBtn.disabled = true;
     els.nextBtn.disabled = true;
+    els.submitBtn.hidden = true;
+    els.nextBtn.hidden = true;
+    els.editAnswerBtn.hidden = true;
     return;
   }
 
@@ -763,7 +930,9 @@ function renderQuestion() {
   els.chapterLabel.innerHTML = `${escapeHtml(spec.edited ? `${question.chapter} · 已手动修正答案` : question.chapter)}${statusHtml}`;
   els.progressLabel.textContent = state.mode === "exam"
     ? `${state.index + 1}/${state.sessionQuestions.length} · ${formatDuration(getExamRemainingSeconds())}`
-    : `${state.index + 1}/${state.sessionQuestions.length}`;
+    : state.mode === "wrong" && state.wrongReviewSession?.selectedIds?.length
+      ? `第 ${Math.floor(state.index / state.wrongReviewSession.selectedIds.length) + 1} 轮 · ${state.index % state.wrongReviewSession.selectedIds.length + 1}/${state.wrongReviewSession.selectedIds.length}`
+      : `${state.index + 1}/${state.sessionQuestions.length}`;
   els.questionTitle.textContent = `${question.title} · ${typeText(question.type)}`;
   els.questionPrompt.textContent = question.prompt;
   els.answerForm.innerHTML = question.type === "fill_blank" ? renderFillInput() : renderOptions(question);
@@ -772,8 +941,88 @@ function renderQuestion() {
     showFeedback(state.currentResult.correct, state.currentResult.label, question);
     els.submitBtn.disabled = true;
     els.nextBtn.disabled = false;
-    els.masteredBtn.hidden = !state.records.wrongBook[question.id];
+    els.nextBtn.textContent = state.mode === "wrong" && state.index >= state.sessionQuestions.length - 1 ? "完成本次重刷" : "下一题";
+    els.masteredBtn.hidden = state.mode === "wrong" || !state.records.wrongBook[question.id];
   }
+}
+
+function renderWrongReviewSelection() {
+  const items = visibleWrongReviewItems();
+  const selectedCount = state.wrongReviewSelection.size;
+  els.priorityBadge.textContent = "REVIEW";
+  els.priorityBadge.className = "badge blue";
+  els.chapterLabel.textContent = `${getCurrentSubject().label} · 错题重刷`;
+  els.progressLabel.textContent = `已选 ${selectedCount}`;
+  els.questionTitle.textContent = "选择本次要重刷的错题";
+  els.questionPrompt.textContent = "勾选题目组成一组，系统会按整组两轮复现。两轮都答对会自动移出错题本。";
+  els.submitBtn.hidden = true;
+  els.nextBtn.hidden = true;
+  els.masteredBtn.hidden = true;
+  els.editAnswerBtn.hidden = true;
+  els.answerForm.innerHTML = `
+    <div class="wrong-review-tools">
+      <label>筛选
+        <select data-wrong-review-filter>
+          <option value="all"${state.wrongReviewFilter === "all" ? " selected" : ""}>全部错题</option>
+          <option value="red"${state.wrongReviewFilter === "red" ? " selected" : ""}>红必背</option>
+          <option value="blue"${state.wrongReviewFilter === "blue" ? " selected" : ""}>蓝常考</option>
+          <option value="black"${state.wrongReviewFilter === "black" ? " selected" : ""}>黑补充</option>
+        </select>
+      </label>
+      <div class="wrong-review-actions">
+        <button type="button" data-wrong-review-action="select-visible">全选当前筛选</button>
+        <button type="button" data-wrong-review-action="clear">取消全选</button>
+        <button class="primary" type="button" data-wrong-review-action="start" ${selectedCount ? "" : "disabled"}>开始重刷 ${selectedCount ? `(${selectedCount})` : ""}</button>
+      </div>
+    </div>
+    <div class="wrong-review-list">
+      ${items.length ? items.map((item) => {
+        const question = getQuestionById(item.questionId);
+        const knowledgeOpen = state.wrongReviewKnowledgeOpen.has(item.questionId);
+        return `
+          <div class="wrong-review-item">
+            <label>
+              <input type="checkbox" name="wrongReviewPick" value="${escapeHtml(item.questionId)}" ${state.wrongReviewSelection.has(item.questionId) ? "checked" : ""}>
+              <span>
+                <strong>${escapeHtml(item.title)}</strong>
+                <em>${priorityText(item.priority)} · ${typeText(item.type)} · 错 ${item.wrongCount} 次</em>
+                <small>${escapeHtml(item.chapter)}</small>
+              </span>
+            </label>
+            <button type="button" data-wrong-review-action="toggle-knowledge" data-question-id="${escapeHtml(item.questionId)}">${knowledgeOpen ? "收起知识点" : "看知识点"}</button>
+            ${knowledgeOpen && question ? renderKnowledgeCard(question) : ""}
+          </div>
+        `;
+      }).join("") : '<p class="empty">当前筛选下没有错题。</p>'}
+    </div>
+  `;
+}
+
+function renderKnowledgeCard(question) {
+  const optionHtml = Array.isArray(question.options) && question.options.length
+    ? `<ol class="knowledge-options">${question.options.map((option, index) => `
+        <li><strong>${escapeHtml(String.fromCharCode(65 + index))}.</strong> ${escapeHtml(option)}</li>
+      `).join("")}</ol>`
+    : "";
+  return `
+    <div class="knowledge-card">
+      <div class="knowledge-prompt">${escapeHtml(question.prompt)}</div>
+      ${optionHtml}
+      <div><strong>标准答案：</strong>${escapeHtml(formatAnswer(question))}</div>
+      <div><strong>来源：</strong>${escapeHtml(question.sourcePoint)}</div>
+    </div>
+  `;
+}
+
+function renderWrongReviewSummary(summary) {
+  return `
+    <div class="exam-summary">
+      <strong>本次共 ${escapeHtml(summary.total)} 题</strong>
+      <div>两轮全对并移出：${escapeHtml(summary.removed)} 题</div>
+      <div>继续保留在错题本：${escapeHtml(summary.kept)} 题</div>
+      <div>完成时间：${escapeHtml(formatAdminTime ? formatAdminTime(summary.completedAt) : new Date(summary.completedAt).toLocaleString("zh-CN"))}</div>
+    </div>
+  `;
 }
 
 function applySelectedAnswer(question) {
@@ -837,6 +1086,7 @@ function submitAnswer() {
   state.answered = true;
   state.currentResult = { correct, label: correct ? "答对了" : "答错了" };
   recordAttempt(question, answer, correct);
+  recordWrongReviewAnswer(question, correct);
   if (state.mode === "exam" && state.examSession) {
     state.examSession.answers[question.id] = answer;
     state.examSession.results[question.id] = {
@@ -853,7 +1103,8 @@ function submitAnswer() {
   if (state.mode === "exam") showFeedback(correct, state.currentResult.label, question);
   els.submitBtn.disabled = true;
   els.nextBtn.disabled = false;
-  els.masteredBtn.hidden = !state.records.wrongBook[question.id];
+  els.nextBtn.textContent = state.mode === "wrong" && state.index >= state.sessionQuestions.length - 1 ? "完成本次重刷" : "下一题";
+  els.masteredBtn.hidden = state.mode === "wrong" || !state.records.wrongBook[question.id];
   saveSessionState();
   void persistRecords();
   renderStats();
@@ -1012,6 +1263,10 @@ function nextQuestion() {
     finishExam(false);
     return;
   }
+  if (state.mode === "wrong" && state.index >= state.sessionQuestions.length - 1) {
+    finishWrongReview();
+    return;
+  }
   if (state.index < state.sessionQuestions.length - 1) {
     state.index += 1;
     state.answered = false;
@@ -1098,7 +1353,7 @@ function renderWrongBook() {
       <strong>${escapeHtml(item.title)}</strong>
       <div class="wrong-meta">${priorityText(item.priority)} · ${typeText(item.type)} · 错 ${item.wrongCount} 次</div>
       <div class="wrong-meta">${escapeHtml(item.chapter)}</div>
-      <button type="button" data-review="${escapeHtml(item.questionId)}">刷这题</button>
+      <button type="button" data-review="${escapeHtml(item.questionId)}">选这题重刷</button>
     </div>
   `).join("") : '<p class="empty">暂时没有错题。答错后会自动归纳到这里。</p>';
 }
@@ -1106,10 +1361,21 @@ function renderWrongBook() {
 function jumpToWrongQuestion(questionId) {
   const question = getQuestionById(questionId);
   if (!question) return;
-  state.mode = "wrong";
-  state.sessionQuestions = [question];
+  stopExamTimer();
+  state.mode = "wrong-select";
+  state.sessionQuestions = [];
   state.index = 0;
+  state.answered = false;
+  state.selectedAnswer = "";
+  state.currentResult = null;
+  state.examSession = null;
+  state.wrongReviewSession = null;
+  state.wrongReviewSelection = new Set([question.id]);
+  state.wrongReviewFilter = "all";
+  setupSetSelect();
   updateModeButtons();
+  saveSessionState();
+  void persistRecords();
   render();
 }
 
@@ -1600,6 +1866,68 @@ async function handleAdminUserClick(event) {
   }
 }
 
+function handleWrongReviewClick(event) {
+  if (state.mode !== "wrong-select") return;
+  const button = event.target.closest("[data-wrong-review-action]");
+  if (!button) return;
+  event.preventDefault();
+
+  if (button.dataset.wrongReviewAction === "select-visible") {
+    for (const item of visibleWrongReviewItems()) {
+      state.wrongReviewSelection.add(item.questionId);
+    }
+    saveSessionState();
+    void persistRecords();
+    renderQuestion();
+  }
+
+  if (button.dataset.wrongReviewAction === "clear") {
+    state.wrongReviewSelection.clear();
+    saveSessionState();
+    void persistRecords();
+    renderQuestion();
+  }
+
+  if (button.dataset.wrongReviewAction === "start") {
+    startSelectedWrongReview();
+  }
+
+  if (button.dataset.wrongReviewAction === "toggle-knowledge") {
+    const questionId = button.dataset.questionId;
+    if (!questionId) return;
+    if (state.wrongReviewKnowledgeOpen.has(questionId)) {
+      state.wrongReviewKnowledgeOpen.delete(questionId);
+    } else {
+      state.wrongReviewKnowledgeOpen.add(questionId);
+    }
+    renderQuestion();
+  }
+}
+
+function handleWrongReviewChange(event) {
+  if (state.mode !== "wrong-select") return false;
+  const target = event.target;
+
+  if (target.matches("[data-wrong-review-filter]")) {
+    state.wrongReviewFilter = target.value;
+    saveSessionState();
+    void persistRecords();
+    renderQuestion();
+    return true;
+  }
+
+  if (target.matches("[name='wrongReviewPick']")) {
+    if (target.checked) state.wrongReviewSelection.add(target.value);
+    else state.wrongReviewSelection.delete(target.value);
+    saveSessionState();
+    schedulePersistRecords();
+    renderQuestion();
+    return true;
+  }
+
+  return false;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1648,6 +1976,7 @@ function bindEvents() {
     const button = event.target.closest("[data-review]");
     if (button) jumpToWrongQuestion(button.dataset.review);
   });
+  els.answerForm.addEventListener("click", handleWrongReviewClick);
   els.answerForm.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -1656,12 +1985,14 @@ function bindEvents() {
     }
   });
   els.answerForm.addEventListener("input", () => {
+    if (state.mode === "wrong-select") return;
     if (!currentQuestion() || state.answered) return;
     captureDraftAnswer();
     saveSessionState();
     schedulePersistRecords();
   });
-  els.answerForm.addEventListener("change", () => {
+  els.answerForm.addEventListener("change", (event) => {
+    if (handleWrongReviewChange(event)) return;
     if (!currentQuestion() || state.answered) return;
     captureDraftAnswer();
     saveSessionState();

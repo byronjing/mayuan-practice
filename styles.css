@@ -643,6 +643,91 @@ select:focus-visible {
   padding: 0 10px;
 }
 
+.wrong-review-tools {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.wrong-review-tools label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.wrong-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wrong-review-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.wrong-review-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfc;
+}
+
+.wrong-review-item label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.wrong-review-item input {
+  margin-top: 3px;
+}
+
+.wrong-review-item span {
+  display: grid;
+  gap: 4px;
+}
+
+.wrong-review-item button {
+  justify-self: start;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.wrong-review-item em,
+.wrong-review-item small {
+  color: var(--muted);
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.knowledge-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-left: 3px solid var(--primary);
+  background: var(--surface-soft);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.knowledge-prompt {
+  font-weight: 700;
+}
+
+.knowledge-options {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 22px;
+}
+
 .wrong-meta,
 .weak-item {
   color: var(--muted);
