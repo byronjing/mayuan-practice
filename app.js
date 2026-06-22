@@ -51,7 +51,9 @@ const state = {
   wrongReviewSelection: new Set(),
   wrongReviewKnowledgeOpen: new Set(),
   wrongReviewFilter: "all",
+  wrongReviewUnitFilter: "all",
   wrongReviewSession: null,
+  guessedQuestionIds: new Set(),
   subject: DEFAULT_SUBJECT,
   appRecords: emptyAppRecords(),
   records: emptyRecords(),
@@ -102,6 +104,7 @@ const els = {
   submitBtn: document.querySelector("#submitBtn"),
   nextBtn: document.querySelector("#nextBtn"),
   masteredBtn: document.querySelector("#masteredBtn"),
+  guessedBtn: document.querySelector("#guessedBtn"),
   editAnswerBtn: document.querySelector("#editAnswerBtn"),
   feedback: document.querySelector("#feedback"),
   wrongFilter: document.querySelector("#wrongFilter"),
@@ -296,6 +299,7 @@ function resetWrongReviewState() {
   state.wrongReviewSelection = new Set();
   state.wrongReviewKnowledgeOpen = new Set();
   state.wrongReviewFilter = "all";
+  state.wrongReviewUnitFilter = "all";
   state.wrongReviewSession = null;
 }
 
@@ -321,6 +325,7 @@ function switchSubject(subject, persistChoice = true) {
   state.selectedAnswer = "";
   state.currentResult = null;
   state.examSession = null;
+  state.guessedQuestionIds = new Set();
   resetWrongReviewState();
   updateSubjectButtons();
   setupSetSelect();
@@ -346,7 +351,9 @@ function createSessionState() {
     currentResult: state.currentResult,
     wrongReviewSelection: [...state.wrongReviewSelection],
     wrongReviewFilter: state.wrongReviewFilter,
+    wrongReviewUnitFilter: state.wrongReviewUnitFilter,
     wrongReviewSession: state.wrongReviewSession,
+    guessedQuestionIds: [...state.guessedQuestionIds],
     examSession: state.examSession ? {
       examSet: state.examSession.examSet,
       startedAt: state.examSession.startedAt,
@@ -378,7 +385,9 @@ function restoreSessionState() {
 
   state.wrongReviewSelection = new Set(Array.isArray(saved.wrongReviewSelection) ? saved.wrongReviewSelection : []);
   state.wrongReviewFilter = saved.wrongReviewFilter || "all";
+  state.wrongReviewUnitFilter = saved.wrongReviewUnitFilter || "all";
   state.wrongReviewSession = saved.wrongReviewSession || null;
+  state.guessedQuestionIds = new Set(Array.isArray(saved.guessedQuestionIds) ? saved.guessedQuestionIds : []);
 
   if (saved.mode === "wrong-select") {
     state.mode = "wrong-select";
@@ -622,6 +631,7 @@ function startSet(setNumber) {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  state.guessedQuestionIds = new Set();
   resetWrongReviewState();
   setupSetSelect();
   updateModeButtons();
@@ -639,6 +649,7 @@ function startRandom() {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  state.guessedQuestionIds = new Set();
   resetWrongReviewState();
   setupSetSelect();
   updateModeButtons();
@@ -660,6 +671,7 @@ function startChoicePractice() {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  state.guessedQuestionIds = new Set();
   resetWrongReviewState();
   setupSetSelect();
   updateModeButtons();
@@ -678,6 +690,7 @@ function startExam(examSet = state.examSet) {
   state.answered = false;
   state.selectedAnswer = "";
   state.currentResult = null;
+  state.guessedQuestionIds = new Set();
   resetWrongReviewState();
   state.examSession = {
     examSet: state.examSet,
@@ -707,6 +720,8 @@ function startWrongPractice() {
   state.wrongReviewSelection = new Set();
   state.wrongReviewKnowledgeOpen = new Set();
   state.wrongReviewFilter = "all";
+  state.wrongReviewUnitFilter = "all";
+  state.guessedQuestionIds = new Set();
   setupSetSelect();
   updateModeButtons();
   saveSessionState();
@@ -722,6 +737,22 @@ function sortedWrongItems() {
 
 function visibleWrongReviewItems() {
   return sortedWrongItems().filter((item) => state.wrongReviewFilter === "all" || item.priority === state.wrongReviewFilter);
+}
+
+function visibleWrongReviewUnits() {
+  return [...new Set(sortedWrongItems().map((item) => item.chapter).filter(Boolean))];
+}
+
+function selectWrongReviewUnit() {
+  if (!isJunli()) return;
+  const selectedUnit = state.wrongReviewUnitFilter || "all";
+  const items = visibleWrongReviewItems().filter((item) => selectedUnit === "all" || item.chapter === selectedUnit);
+  for (const item of items) {
+    state.wrongReviewSelection.add(item.questionId);
+  }
+  saveSessionState();
+  void persistRecords();
+  renderQuestion();
 }
 
 function startSelectedWrongReview() {
@@ -889,6 +920,8 @@ function renderQuestion() {
   els.submitBtn.disabled = Boolean(state.answered);
   els.nextBtn.disabled = !state.answered;
   els.masteredBtn.hidden = true;
+  els.guessedBtn.hidden = true;
+  els.guessedBtn.disabled = false;
   els.editAnswerBtn.disabled = !question;
 
   if (state.mode === "wrong-select") {
@@ -919,6 +952,7 @@ function renderQuestion() {
     els.submitBtn.hidden = true;
     els.nextBtn.hidden = true;
     els.editAnswerBtn.hidden = true;
+    els.guessedBtn.hidden = true;
     return;
   }
 
@@ -943,11 +977,17 @@ function renderQuestion() {
     els.nextBtn.disabled = false;
     els.nextBtn.textContent = state.mode === "wrong" && state.index >= state.sessionQuestions.length - 1 ? "完成本次重刷" : "下一题";
     els.masteredBtn.hidden = state.mode === "wrong" || !state.records.wrongBook[question.id];
+    els.guessedBtn.hidden = !isJunli() || isCurrentAnswerGuessed();
+    els.guessedBtn.disabled = isCurrentAnswerGuessed();
   }
 }
 
 function renderWrongReviewSelection() {
   const items = visibleWrongReviewItems();
+  const unitOptions = visibleWrongReviewUnits();
+  if (state.wrongReviewUnitFilter !== "all" && !unitOptions.includes(state.wrongReviewUnitFilter)) {
+    state.wrongReviewUnitFilter = "all";
+  }
   const selectedCount = state.wrongReviewSelection.size;
   els.priorityBadge.textContent = "REVIEW";
   els.priorityBadge.className = "badge blue";
@@ -958,6 +998,7 @@ function renderWrongReviewSelection() {
   els.submitBtn.hidden = true;
   els.nextBtn.hidden = true;
   els.masteredBtn.hidden = true;
+  els.guessedBtn.hidden = true;
   els.editAnswerBtn.hidden = true;
   els.answerForm.innerHTML = `
     <div class="wrong-review-tools">
@@ -969,8 +1010,17 @@ function renderWrongReviewSelection() {
           <option value="black"${state.wrongReviewFilter === "black" ? " selected" : ""}>黑补充</option>
         </select>
       </label>
+      ${isJunli() ? `
+        <label>单元
+          <select data-wrong-review-unit>
+            <option value="all"${state.wrongReviewUnitFilter === "all" ? " selected" : ""}>全部单元</option>
+            ${unitOptions.map((chapter) => `<option value="${escapeHtml(chapter)}"${state.wrongReviewUnitFilter === chapter ? " selected" : ""}>${escapeHtml(chapter)}</option>`).join("")}
+          </select>
+        </label>
+      ` : ""}
       <div class="wrong-review-actions">
         <button type="button" data-wrong-review-action="select-visible">全选当前筛选</button>
+        ${isJunli() ? '<button type="button" data-wrong-review-action="select-unit">选择该单元错题</button>' : ""}
         <button type="button" data-wrong-review-action="clear">取消全选</button>
         <button class="primary" type="button" data-wrong-review-action="start" ${selectedCount ? "" : "disabled"}>开始重刷 ${selectedCount ? `(${selectedCount})` : ""}</button>
       </div>
@@ -1107,6 +1157,66 @@ function submitAnswer() {
   els.masteredBtn.hidden = state.mode === "wrong" || !state.records.wrongBook[question.id];
   saveSessionState();
   void persistRecords();
+  renderStats();
+  renderWrongBook();
+}
+
+function currentGuessKey() {
+  const question = currentQuestion();
+  return question ? `${state.mode}:${state.index}:${question.id}` : "";
+}
+
+function isCurrentAnswerGuessed() {
+  const key = currentGuessKey();
+  return Boolean(state.currentResult?.guessed || (key && state.guessedQuestionIds.has(key)));
+}
+
+function markCurrentAnswerGuessed() {
+  const question = currentQuestion();
+  if (!isJunli() || !question || !state.answered || !state.currentResult || isCurrentAnswerGuessed()) return;
+
+  const key = currentGuessKey();
+  if (key) state.guessedQuestionIds.add(key);
+
+  const lastAttemptIndex = state.records.attempts
+    .map((attempt, index) => ({ attempt, index }))
+    .filter((row) => row.attempt.questionId === question.id)
+    .map((row) => row.index)
+    .pop();
+  const lastAttempt = Number.isInteger(lastAttemptIndex) ? state.records.attempts[lastAttemptIndex] : null;
+  const wasCorrect = lastAttempt ? Boolean(lastAttempt.correct) : Boolean(state.currentResult.correct);
+  const existingWrong = state.records.wrongBook[question.id];
+
+  if (lastAttempt) {
+    state.records.attempts[lastAttemptIndex] = {
+      ...lastAttempt,
+      correct: false,
+      guessed: true,
+      recalculatedAt: new Date().toISOString()
+    };
+  }
+
+  if (wasCorrect && existingWrong?.correctAfterWrong) {
+    existingWrong.correctAfterWrong = Math.max(0, existingWrong.correctAfterWrong - 1);
+  }
+
+  if (wasCorrect || !existingWrong) {
+    upsertWrongBookItem(question);
+  }
+
+  if (state.mode === "wrong") {
+    recordWrongReviewAnswer(question, false);
+  }
+
+  state.currentResult = {
+    ...state.currentResult,
+    correct: false,
+    guessed: true,
+    label: "已按猜题处理，加入错题本。"
+  };
+  saveSessionState();
+  void persistRecords("已按猜题处理，加入错题本。");
+  renderQuestion();
   renderStats();
   renderWrongBook();
 }
@@ -1881,6 +1991,10 @@ function handleWrongReviewClick(event) {
     renderQuestion();
   }
 
+  if (button.dataset.wrongReviewAction === "select-unit") {
+    selectWrongReviewUnit();
+  }
+
   if (button.dataset.wrongReviewAction === "clear") {
     state.wrongReviewSelection.clear();
     saveSessionState();
@@ -1910,6 +2024,14 @@ function handleWrongReviewChange(event) {
 
   if (target.matches("[data-wrong-review-filter]")) {
     state.wrongReviewFilter = target.value;
+    saveSessionState();
+    void persistRecords();
+    renderQuestion();
+    return true;
+  }
+
+  if (target.matches("[data-wrong-review-unit]")) {
+    state.wrongReviewUnitFilter = target.value;
     saveSessionState();
     void persistRecords();
     renderQuestion();
@@ -1964,6 +2086,7 @@ function bindEvents() {
   els.submitBtn.addEventListener("click", submitAnswer);
   els.nextBtn.addEventListener("click", nextQuestion);
   els.masteredBtn.addEventListener("click", markMastered);
+  els.guessedBtn.addEventListener("click", markCurrentAnswerGuessed);
   els.editAnswerBtn.addEventListener("click", openAnswerEditor);
   els.saveAnswerEditBtn.addEventListener("click", saveAnswerEdit);
   els.resetAnswerEditBtn.addEventListener("click", resetAnswerEdit);
