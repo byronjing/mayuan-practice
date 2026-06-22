@@ -2033,8 +2033,7 @@ function handleWrongReviewChange(event) {
   if (target.matches("[data-wrong-review-unit]")) {
     state.wrongReviewUnitFilter = target.value;
     saveSessionState();
-    void persistRecords();
-    renderQuestion();
+    schedulePersistRecords();
     return true;
   }
 
