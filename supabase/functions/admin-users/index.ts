@@ -7,20 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
-const emptyRecords = {
-  attempts: [],
-  wrongBook: {},
-  answerOverrides: {},
-  sessionState: null,
-  examResults: {},
-  backupMeta: {
-    backupVersion: 1,
-    questionBankVersion: "2026-05-28-release",
-    updatedAt: null
-  }
-};
-
-const subjectKeys = ["mayuan", "junli"];
+const subjectKeys = ["mayuan", "mayuan_sync", "junli"];
 
 function emptySubjectRecords() {
   return {
@@ -28,7 +15,22 @@ function emptySubjectRecords() {
     wrongBook: {},
     answerOverrides: {},
     sessionState: null,
-    examResults: {}
+    examResults: {},
+    wrongReviewResults: []
+  };
+}
+
+function emptyAppRecords() {
+  return {
+    app: "supreme-practice",
+    recordVersion: 2,
+    activeSubject: "mayuan",
+    subjects: Object.fromEntries(subjectKeys.map((subject) => [subject, emptySubjectRecords()])),
+    backupMeta: {
+      backupVersion: 1,
+      questionBankVersion: "multi-subject",
+      updatedAt: null
+    }
   };
 }
 
@@ -41,7 +43,8 @@ function normalizeSubjectRecords(records: unknown) {
     wrongBook: source.wrongBook && typeof source.wrongBook === "object" ? source.wrongBook as Record<string, unknown> : {},
     answerOverrides: source.answerOverrides && typeof source.answerOverrides === "object" ? source.answerOverrides as Record<string, unknown> : {},
     sessionState: source.sessionState && typeof source.sessionState === "object" ? source.sessionState : null,
-    examResults: source.examResults && typeof source.examResults === "object" ? source.examResults as Record<string, unknown> : {}
+    examResults: source.examResults && typeof source.examResults === "object" ? source.examResults as Record<string, unknown> : {},
+    wrongReviewResults: Array.isArray(source.wrongReviewResults) ? source.wrongReviewResults : []
   };
 }
 
@@ -237,8 +240,8 @@ serve(async (req) => {
 
       const { error: recordError } = await adminClient.from("practice_records").insert({
         user_id: userId,
-        records: emptyRecords,
-        question_bank_version: emptyRecords.backupMeta.questionBankVersion
+        records: emptyAppRecords(),
+        question_bank_version: "multi-subject"
       });
       if (recordError) throw recordError;
       return jsonResponse({ ok: true });

@@ -1,0 +1,617 @@
+{
+  "source": "/Users/zhoujing/Downloads/马原机考题库(1)..docx",
+  "totalQuestions": 523,
+  "units": {
+    "绪论": {
+      "single_choice": {
+        "questionCount": 21,
+        "answerCount": 21,
+        "questionRange": [
+          1,
+          21
+        ],
+        "answerRange": [
+          1,
+          21
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      },
+      "multiple_choice": {
+        "questionCount": 11,
+        "answerCount": 11,
+        "questionRange": [
+          1,
+          11
+        ],
+        "answerRange": [
+          1,
+          11
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      }
+    },
+    "第一章": {
+      "single_choice": {
+        "questionCount": 66,
+        "answerCount": 66,
+        "questionRange": [
+          1,
+          66
+        ],
+        "answerRange": [
+          1,
+          66
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": [],
+        "optionRepairs": [
+          {
+            "questionNumber": 8,
+            "repairs": [
+              "missing A option marker repaired from text before B"
+            ]
+          }
+        ]
+      },
+      "multiple_choice": {
+        "questionCount": 55,
+        "answerCount": 55,
+        "questionRange": [
+          1,
+          55
+        ],
+        "answerRange": [
+          1,
+          55
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": [],
+        "inlineAnswerOverrides": [
+          {
+            "questionNumber": 45,
+            "inlineAnswer": "ACDE",
+            "referenceAnswer": "ABDE",
+            "reason": "source inline marker is 1345/ACDE, but reference answer ABDE matches the option content; C says people can perfect laws."
+          }
+        ]
+      }
+    },
+    "第二章": {
+      "single_choice": {
+        "questionCount": 43,
+        "answerCount": 43,
+        "questionRange": [
+          1,
+          43
+        ],
+        "answerRange": [
+          1,
+          43
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": [
+          "answer number 7 repaired to 27"
+        ],
+        "optionRepairs": [
+          {
+            "questionNumber": 35,
+            "repairs": [
+              "option labels reordered from ABDC to ABCD"
+            ]
+          }
+        ]
+      },
+      "multiple_choice": {
+        "questionCount": 35,
+        "answerCount": 35,
+        "questionRange": [
+          1,
+          35
+        ],
+        "answerRange": [
+          1,
+          35
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      }
+    },
+    "第三章": {
+      "single_choice": {
+        "questionCount": 38,
+        "answerCount": 38,
+        "questionRange": [
+          1,
+          38
+        ],
+        "answerRange": [
+          1,
+          38
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      },
+      "multiple_choice": {
+        "questionCount": 34,
+        "answerCount": 34,
+        "questionRange": [
+          1,
+          34
+        ],
+        "answerRange": [
+          1,
+          34
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      }
+    },
+    "第四章": {
+      "single_choice": {
+        "questionCount": 52,
+        "answerCount": 52,
+        "questionRange": [
+          1,
+          52
+        ],
+        "answerRange": [
+          1,
+          52
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      },
+      "multiple_choice": {
+        "questionCount": 36,
+        "answerCount": 36,
+        "questionRange": [
+          1,
+          36
+        ],
+        "answerRange": [
+          1,
+          36
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      }
+    },
+    "第五章": {
+      "single_choice": {
+        "questionCount": 28,
+        "answerCount": 28,
+        "questionRange": [
+          1,
+          28
+        ],
+        "answerRange": [
+          1,
+          28
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": [],
+        "optionRepairs": [
+          {
+            "questionNumber": 18,
+            "repairs": [
+              "option labels reordered from ACBD to ABCD"
+            ]
+          }
+        ]
+      },
+      "multiple_choice": {
+        "questionCount": 34,
+        "answerCount": 34,
+        "questionRange": [
+          1,
+          34
+        ],
+        "answerRange": [
+          1,
+          34
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": [],
+        "optionRepairs": [
+          {
+            "questionNumber": 26,
+            "repairs": [
+              "duplicate/missing option label repaired by position: ADCD -> ABCD"
+            ]
+          },
+          {
+            "questionNumber": 27,
+            "repairs": [
+              "option labels reordered from ACBD to ABCD"
+            ]
+          }
+        ]
+      }
+    },
+    "第六章": {
+      "single_choice": {
+        "questionCount": 24,
+        "answerCount": 24,
+        "questionRange": [
+          1,
+          24
+        ],
+        "answerRange": [
+          1,
+          24
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      },
+      "multiple_choice": {
+        "questionCount": 18,
+        "answerCount": 18,
+        "questionRange": [
+          1,
+          18
+        ],
+        "answerRange": [
+          1,
+          18
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      }
+    },
+    "第七章": {
+      "single_choice": {
+        "questionCount": 15,
+        "answerCount": 15,
+        "questionRange": [
+          1,
+          15
+        ],
+        "answerRange": [
+          1,
+          15
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      },
+      "multiple_choice": {
+        "questionCount": 13,
+        "answerCount": 13,
+        "questionRange": [
+          1,
+          13
+        ],
+        "answerRange": [
+          1,
+          13
+        ],
+        "missingAnswers": [],
+        "extraAnswers": [],
+        "nonContiguousQuestions": false,
+        "answerRepairs": []
+      }
+    }
+  },
+  "errors": [],
+  "manualSamples": [
+    {
+      "unit": "绪论",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-001",
+      "title": "绪论 第1题",
+      "answer": "A",
+      "prompt": "人类进入2l世纪，英国广播公司(BBS)在全球范围内进行“千年思想家”网评，名列榜首的是"
+    },
+    {
+      "unit": "绪论",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-021",
+      "title": "绪论 第21题",
+      "answer": "A",
+      "prompt": "马克思主义最崇高的社会理想"
+    },
+    {
+      "unit": "绪论",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-022",
+      "title": "绪论 第1题",
+      "answer": "ABCD",
+      "prompt": "马克思在当今西方世界之所以仍倍受尊崇,是因为"
+    },
+    {
+      "unit": "绪论",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-032",
+      "title": "绪论 第11题",
+      "answer": "BCD",
+      "prompt": "马克思主义中国化的三大理论成果是"
+    },
+    {
+      "unit": "第一章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-033",
+      "title": "第一章 第1题",
+      "answer": "A",
+      "prompt": "物质无非是各种物的总和，是从这种总和中抽象出来的。这种观点属于"
+    },
+    {
+      "unit": "第一章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-098",
+      "title": "第一章 第66题",
+      "answer": "D",
+      "prompt": "辩证法的否定即“扬弃”，它的含义是指"
+    },
+    {
+      "unit": "第一章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-099",
+      "title": "第一章 第1题",
+      "answer": "AC",
+      "prompt": "哲学是"
+    },
+    {
+      "unit": "第一章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-153",
+      "title": "第一章 第55题",
+      "answer": "AC",
+      "prompt": "否定之否定规律认为，事物发展都要经历"
+    },
+    {
+      "unit": "第二章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-154",
+      "title": "第二章 第1题",
+      "answer": "D",
+      "prompt": "1978年关于真理标准大讨论是一场新的思想解放运动。实践之所以成为检验真理的唯一标准是由"
+    },
+    {
+      "unit": "第二章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-196",
+      "title": "第二章 第43题",
+      "answer": "B",
+      "prompt": "人类社会是一个从必然王国到自由王国的发展过程。所谓必然王国是指"
+    },
+    {
+      "unit": "第二章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-197",
+      "title": "第二章 第1题",
+      "answer": "BCD",
+      "prompt": "人对物质世界的实践把握是在实践的运行过程中实现的，其基本环节有"
+    },
+    {
+      "unit": "第二章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-231",
+      "title": "第二章 第35题",
+      "answer": "ABCD",
+      "prompt": "真理和价值的对立统一关系表现在"
+    },
+    {
+      "unit": "第三章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-232",
+      "title": "第三章 第1题",
+      "answer": "B",
+      "prompt": "唯物史观认为，人类的第一个历史活动是"
+    },
+    {
+      "unit": "第三章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-269",
+      "title": "第三章 第38题",
+      "answer": "C",
+      "prompt": "在人民群众和杰出人物的历史作用问题上，历史唯物主义认为"
+    },
+    {
+      "unit": "第三章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-270",
+      "title": "第三章 第1题",
+      "answer": "AC",
+      "prompt": "“随着新生产力的获得……人们也就会改变自己的一切社会关系，手推磨产生的是封建主义的社会，蒸汽磨产生的是工业资本家的社会。”这段话表明科学技术是"
+    },
+    {
+      "unit": "第三章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-303",
+      "title": "第三章 第34题",
+      "answer": "ABCD",
+      "prompt": "人类社会之所以不同于动物的群体，是因为人类有了实践活动。在一个纺织厂内，不但存在着生产实践，还存在着该厂内人与人之间社会关系的实践。以下关于这些实践活动的说法中，正确的有"
+    },
+    {
+      "unit": "第四章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-304",
+      "title": "第四章 第1题",
+      "answer": "C",
+      "prompt": "在市场上，一台笔记本电脑的标价是12000元，此时执行价值尺度职能的货币是"
+    },
+    {
+      "unit": "第四章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-355",
+      "title": "第四章 第52题",
+      "answer": "C",
+      "prompt": "某资本家投资100万元，资本有机构成4：1，m’=100%,其剩余价值量为："
+    },
+    {
+      "unit": "第四章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-356",
+      "title": "第四章 第1题",
+      "answer": "ACD",
+      "prompt": "劳动力是任何社会生产的基本要素，在特定的社会发展阶段和特定的历史条件下，劳动力作为一种特殊商品，其价值的构成包括"
+    },
+    {
+      "unit": "第四章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-391",
+      "title": "第四章 第36题",
+      "answer": "AB",
+      "prompt": "资本主义基本矛盾主要表现在"
+    },
+    {
+      "unit": "第五章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-392",
+      "title": "第五章 第1题",
+      "answer": "D",
+      "prompt": "垄断统治的实质是"
+    },
+    {
+      "unit": "第五章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-419",
+      "title": "第五章 第28题",
+      "answer": "D",
+      "prompt": "资本主义发展的历史趋势是"
+    },
+    {
+      "unit": "第五章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-420",
+      "title": "第五章 第1题",
+      "answer": "ABC",
+      "prompt": "垄断资本主义的基本经济特征包括"
+    },
+    {
+      "unit": "第五章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-453",
+      "title": "第五章 第34题",
+      "answer": "ABC",
+      "prompt": "在当代资本主义生产关系中，阶层、阶级结构发生的新变化主要是"
+    },
+    {
+      "unit": "第六章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-454",
+      "title": "第六章 第1题",
+      "answer": "C",
+      "prompt": "科学社会主义创立的理论依据是"
+    },
+    {
+      "unit": "第六章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-477",
+      "title": "第六章 第24题",
+      "answer": "D",
+      "prompt": "无产阶级革命和无产阶级专政的第一次伟大尝试是"
+    },
+    {
+      "unit": "第六章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-478",
+      "title": "第六章 第1题",
+      "answer": "ABC",
+      "prompt": "空想社会主义的发展经历了哪些阶段"
+    },
+    {
+      "unit": "第六章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-495",
+      "title": "第六章 第18题",
+      "answer": "ABCD",
+      "prompt": "经济文化相对落后的国家建设社会主义之所以是长期的和艰巨的，是因为"
+    },
+    {
+      "unit": "第七章",
+      "type": "single_choice",
+      "position": "first",
+      "id": "MYS-496",
+      "title": "第七章 第1题",
+      "answer": "D",
+      "prompt": "下列提法正确的是"
+    },
+    {
+      "unit": "第七章",
+      "type": "single_choice",
+      "position": "last",
+      "id": "MYS-510",
+      "title": "第七章 第15题",
+      "answer": "D",
+      "prompt": "自由王国是指人们"
+    },
+    {
+      "unit": "第七章",
+      "type": "multiple_choice",
+      "position": "first",
+      "id": "MYS-511",
+      "title": "第七章 第1题",
+      "answer": "ABC",
+      "prompt": "马克思恩格斯展望未来的科学立场和方法是"
+    },
+    {
+      "unit": "第七章",
+      "type": "multiple_choice",
+      "position": "last",
+      "id": "MYS-523",
+      "title": "第七章 第13题",
+      "answer": "BCD",
+      "prompt": "社会主义按劳分配的原则"
+    }
+  ]
+}

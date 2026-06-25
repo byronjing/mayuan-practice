@@ -5,11 +5,13 @@
 当前学科：
 
 - 马原：原有马原题库与历史进度。
+- 马原同步练：由 `马原机考题库(1)..docx` 转换而来，按绪论和第一章到第七章整理。
 - 军理：由 `军事理论题库(1)(3)(2).docx` 转换而来。
 
 主要练习模式：
 
 - 马原：套题练习、模拟考试、随机练习、错题重刷。
+- 马原同步练：单元练习、选择题专项、随机练习、错题重刷。
 - 军理：章节练习、选择题专项、随机练习、错题重刷。
 - 随机练习会优先抽没做过的题；题目旁会显示“未做 / 已做 / 错题”标签。
 - 每个学科会保存当前刷题进度，再次登录后可以继续。
@@ -82,8 +84,8 @@ supabase functions deploy admin-users
 ## 数据隔离
 
 - 每个学号账号在 `practice_records` 中只有自己的记录。
-- 马原和军理仍写入同一个云端路径：`practice_records.records`。
-- 多学科记录在 JSON 内保存为 `subjects.mayuan` 和 `subjects.junli`，错题本、练习历史、手动答案修正互相隔离。
+- 马原、马原同步练和军理仍写入同一个云端路径：`practice_records.records`。
+- 多学科记录在 JSON 内保存为 `subjects.mayuan`、`subjects.mayuan_sync` 和 `subjects.junli`，错题本、练习历史、手动答案修正互相隔离。
 - 旧格式 `attempts`、`wrongBook`、`answerOverrides` 会自动当作马原历史记录读取，并补出空的军理记录。
 - 新建朋友账号默认两个学科都是空记录。
 - Row Level Security 限制普通用户只能读写自己的记录。
@@ -106,6 +108,9 @@ supabase functions deploy admin-users
 - `app.js`：刷题、登录、云端同步和管理逻辑。
 - `questions.js`：核心题库。
 - `supplemental_questions.js`：扩展题库。
+- `mayuan_sync_questions.js`：马原同步练题库。
+- `mayuan_sync_questions.audit.json`：马原同步练题库转换审计报告。
+- `build_mayuan_sync_bank.py`：从 Word 原文件生成马原同步练题库和审计报告。
 - `military_questions.js`：军理题库。
 - `supabase/migrations/001_initial_schema.sql`：数据库表和 RLS。
 - `supabase/functions/admin-users/index.ts`：管理员账号管理函数。

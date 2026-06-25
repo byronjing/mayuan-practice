@@ -21,6 +21,14 @@ const SUBJECTS = {
     randomText: (count) => `马原 · 随机练习会从 ${count} 题中抽取 20 题，适合每天快速热身。`,
     wrongText: "马原 · 错题重刷按错误次数优先，适合考前集中补短板。"
   },
+  mayuan_sync: {
+    label: "马原同步练",
+    getQuestions: () => window.MAYUAN_SYNC_QUESTIONS || [],
+    bankVersion: "mayuan-sync-docx-20260625",
+    setModeText: (_set, group) => `马原同步练 · 正在练习${group?.label || "单元"}。题目来自马原机考题库。`,
+    randomText: (count) => `马原同步练 · 随机练习会从 ${count} 题中抽取 20 题，适合按单元复习后混合检查。`,
+    wrongText: "马原同步练 · 错题重刷只使用马原同步练错题本，不会混入其他学科。"
+  },
   junli: {
     label: "军理",
     getQuestions: () => window.MILITARY_QUESTIONS || [],
@@ -215,13 +223,13 @@ function isMayuan() {
   return state.subject === "mayuan";
 }
 
-function isJunli() {
-  return state.subject === "junli";
+function isChapterSubject() {
+  return state.subject === "junli" || state.subject === "mayuan_sync";
 }
 
 function getPracticeGroups() {
   const questions = getCurrentQuestions();
-  if (isJunli()) {
+  if (isChapterSubject()) {
     const chapters = [...new Set(questions.map((question) => question.chapter))];
     return chapters.map((chapter, index) => ({
       id: String(index + 1),
@@ -611,10 +619,10 @@ function setupSetSelect() {
     return;
   }
 
-  els.setSelectLabel.textContent = isJunli() ? "章节" : "套题";
+  els.setSelectLabel.textContent = isChapterSubject() ? "单元" : "套题";
   const groups = getPracticeGroups();
   els.setSelect.innerHTML = groups.map((group) => {
-    const countText = isJunli() ? `（${group.questions.length}题）` : "";
+    const countText = isChapterSubject() ? `（${group.questions.length}题）` : "";
     return `<option value="${group.id}">${escapeHtml(group.label)}${countText}</option>`;
   }).join("");
   if (state.set > groups.length) state.set = 1;
@@ -744,7 +752,7 @@ function visibleWrongReviewUnits() {
 }
 
 function selectWrongReviewUnit() {
-  if (!isJunli()) return;
+  if (!isChapterSubject()) return;
   const selectedUnit = state.wrongReviewUnitFilter || "all";
   const items = visibleWrongReviewItems().filter((item) => selectedUnit === "all" || item.chapter === selectedUnit);
   for (const item of items) {
@@ -843,21 +851,19 @@ function seededPick(list, count, seed) {
 
 function updateModeButtons() {
   els.setModeBtn.classList.toggle("active", state.mode === "set");
-  els.setModeBtn.textContent = isJunli() ? "章节练习" : "套题练习";
+  els.setModeBtn.textContent = isChapterSubject() ? "单元练习" : "套题练习";
   els.examModeBtn.hidden = !isMayuan();
   els.examModeBtn.classList.toggle("active", state.mode === "exam");
-  els.choiceModeBtn.hidden = !isJunli();
+  els.choiceModeBtn.hidden = !isChapterSubject();
   els.choiceModeBtn.classList.toggle("active", state.mode === "choice");
   els.randomModeBtn.classList.toggle("active", state.mode === "random");
   els.wrongModeBtn.classList.toggle("active", state.mode === "wrong" || state.mode === "wrong-select");
   els.modeText.textContent = state.mode === "set"
-    ? isJunli()
-      ? `军理 · 正在练习${getPracticeGroups()[state.set - 1]?.label || "章节"}。`
-      : getCurrentSubject().setModeText(state.set)
+    ? getCurrentSubject().setModeText(state.set, getPracticeGroups()[state.set - 1])
     : state.mode === "exam"
       ? `马原 · 第 ${state.examSet} 套模拟考试，满分 ${getExamMaxScore()} 分，限时 30 分钟。`
       : state.mode === "choice"
-        ? "军理 · 选择题专项只抽单选和多选，优先出现未做题。"
+        ? `${getCurrentSubject().label} · 选择题专项只抽单选和多选，优先出现未做题。`
         : state.mode === "random"
           ? getCurrentSubject().randomText(getCurrentQuestions().length)
           : state.mode === "wrong-select"
@@ -977,7 +983,7 @@ function renderQuestion() {
     els.nextBtn.disabled = false;
     els.nextBtn.textContent = state.mode === "wrong" && state.index >= state.sessionQuestions.length - 1 ? "完成本次重刷" : "下一题";
     els.masteredBtn.hidden = state.mode === "wrong" || !state.records.wrongBook[question.id];
-    els.guessedBtn.hidden = !isJunli() || isCurrentAnswerGuessed();
+    els.guessedBtn.hidden = !isChapterSubject() || isCurrentAnswerGuessed();
     els.guessedBtn.disabled = isCurrentAnswerGuessed();
   }
 }
@@ -1010,7 +1016,7 @@ function renderWrongReviewSelection() {
           <option value="black"${state.wrongReviewFilter === "black" ? " selected" : ""}>黑补充</option>
         </select>
       </label>
-      ${isJunli() ? `
+      ${isChapterSubject() ? `
         <label>单元
           <select data-wrong-review-unit>
             <option value="all"${state.wrongReviewUnitFilter === "all" ? " selected" : ""}>全部单元</option>
@@ -1020,7 +1026,7 @@ function renderWrongReviewSelection() {
       ` : ""}
       <div class="wrong-review-actions">
         <button type="button" data-wrong-review-action="select-visible">全选当前筛选</button>
-        ${isJunli() ? '<button type="button" data-wrong-review-action="select-unit">选择该单元错题</button>' : ""}
+        ${isChapterSubject() ? '<button type="button" data-wrong-review-action="select-unit">选择该单元错题</button>' : ""}
         <button type="button" data-wrong-review-action="clear">取消全选</button>
         <button class="primary" type="button" data-wrong-review-action="start" ${selectedCount ? "" : "disabled"}>开始重刷 ${selectedCount ? `(${selectedCount})` : ""}</button>
       </div>
@@ -1173,7 +1179,7 @@ function isCurrentAnswerGuessed() {
 
 function markCurrentAnswerGuessed() {
   const question = currentQuestion();
-  if (!isJunli() || !question || !state.answered || !state.currentResult || isCurrentAnswerGuessed()) return;
+  if (!isChapterSubject() || !question || !state.answered || !state.currentResult || isCurrentAnswerGuessed()) return;
 
   const key = currentGuessKey();
   if (key) state.guessedQuestionIds.add(key);
@@ -1909,6 +1915,7 @@ function formatSubjectUsage(label, usage = {}) {
 function renderAdminUsers(users) {
   els.adminUsers.innerHTML = users.length ? users.map((user) => {
     const mayuan = user.usage?.subjects?.mayuan || {};
+    const mayuanSync = user.usage?.subjects?.mayuan_sync || {};
     const junli = user.usage?.subjects?.junli || {};
     return `
     <div class="admin-user">
@@ -1917,6 +1924,7 @@ function renderAdminUsers(users) {
         <span>${user.role === "admin" ? "管理员" : "普通账号"} · ${user.is_active ? "已启用" : "已停用"}</span>
         <div class="admin-user-progress">
           ${formatSubjectUsage("马原", mayuan)}
+          ${formatSubjectUsage("马原同步练", mayuanSync)}
           ${formatSubjectUsage("军理", junli)}
           <span>最近使用：${escapeHtml(formatAdminTime(user.usage?.latest))}${user.has_record ? "" : " · 尚无云端记录"}</span>
         </div>
