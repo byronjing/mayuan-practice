@@ -9953,3 +9953,5 @@ const MAYUAN_SYNC_QUESTIONS = [
     "explanation": "来自《马原机考题库(1)..docx》第七章。正确答案：B. 默认劳动者不同的个人天赋；C. 体现着等价交换原则；D. 有其历史局限性。"
   }
 ];
+
+window.MAYUAN_SYNC_QUESTIONS = MAYUAN_SYNC_QUESTIONS;

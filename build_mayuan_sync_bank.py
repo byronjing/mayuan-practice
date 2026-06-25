@@ -420,7 +420,11 @@ def make_questions(units: OrderedDict[str, dict], errors: list[str]) -> tuple[li
 def write_outputs(questions: list[dict], audit: dict) -> None:
     OUT_AUDIT.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     body = json.dumps(questions, ensure_ascii=False, indent=2)
-    OUT_JS.write_text(f"const MAYUAN_SYNC_QUESTIONS = {body};\n", encoding="utf-8")
+    OUT_JS.write_text(
+        f"const MAYUAN_SYNC_QUESTIONS = {body};\n\n"
+        "window.MAYUAN_SYNC_QUESTIONS = MAYUAN_SYNC_QUESTIONS;\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> int:
