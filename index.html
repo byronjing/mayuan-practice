@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>至尊刷题系统</title>
-    <link rel="stylesheet" href="styles.css?v=20260625-mayuan-sync">
+    <link rel="stylesheet" href="styles.css?v=20260630-site-upgrade">
   </head>
   <body>
     <section id="authView" class="auth-shell" aria-label="登录">
@@ -22,7 +22,11 @@
 
     <main id="appView" class="app-shell" hidden>
       <header class="topbar">
-        <div>
+        <div class="topbar-title">
+          <label class="theme-toggle" title="切换深色模式">
+            <input id="darkModeToggle" type="checkbox" aria-label="深色模式">
+            <span>深色</span>
+          </label>
           <h1>至尊刷题系统</h1>
           <p id="modeText">选择学科后开始练习。每套约 20 题，错题会按学科分别归档。</p>
         </div>
@@ -55,7 +59,6 @@
           <div id="subjectSwitch" class="segmented" role="group" aria-label="切换学科">
             <button id="mayuanSubjectBtn" class="active" type="button" data-subject="mayuan">马原</button>
             <button id="mayuanSyncSubjectBtn" type="button" data-subject="mayuan_sync">马原同步练</button>
-            <button id="junliSubjectBtn" type="button" data-subject="junli">军理</button>
           </div>
         </div>
         <div class="field">
@@ -65,7 +68,7 @@
         <div class="segmented" role="group" aria-label="练习入口">
           <button id="setModeBtn" class="active" type="button">套题练习</button>
           <button id="examModeBtn" type="button">模拟考试</button>
-          <button id="choiceModeBtn" type="button" hidden>选择题专项</button>
+          <button id="choiceModeBtn" type="button" hidden>单选题专项</button>
           <button id="randomModeBtn" type="button">随机练习</button>
           <button id="wrongModeBtn" type="button">错题重刷</button>
         </div>
@@ -143,6 +146,12 @@
         <h2>手动修改答案</h2>
         <p id="answerEditHint"></p>
         <div id="answerEditFields" class="answer-edit-fields"></div>
+        <section class="answer-suggestions" aria-label="其他用户修正参考">
+          <h3>其他用户修正参考</h3>
+          <div id="answerSuggestions" class="answer-suggestion-list">
+            <p class="empty">打开后加载其他用户修正情况。</p>
+          </div>
+        </section>
         <div class="dialog-actions">
           <button id="resetAnswerEditBtn" value="default" type="button">恢复原始答案</button>
           <button value="cancel" type="submit">取消</button>
@@ -185,8 +194,7 @@
     <script src="config.js?v=20260625-mayuan-sync"></script>
     <script src="questions.js?v=20260625-mayuan-sync"></script>
     <script src="supplemental_questions.js?v=20260625-mayuan-sync"></script>
-    <script src="military_questions.js?v=20260625-mayuan-sync"></script>
     <script src="mayuan_sync_questions.js?v=20260625-mayuan-sync"></script>
-    <script src="app.js?v=20260625-mayuan-sync"></script>
+    <script src="app.js?v=20260630-site-upgrade"></script>
   </body>
 </html>

@@ -1,5 +1,6 @@
 const STORAGE_KEY = "mayuan_practice_state_v2";
 const LEGACY_STORAGE_KEY = "mayuan_practice_state_v1";
+const THEME_STORAGE_KEY = "supreme_practice_dark_mode";
 const BACKUP_VERSION = 1;
 const QUESTION_BANK_VERSION = "2026-05-28-release";
 const MULTI_SUBJECT_RECORD_VERSION = 2;
@@ -28,14 +29,6 @@ const SUBJECTS = {
     setModeText: (_set, group) => `马原同步练 · 正在练习${group?.label || "单元"}。题目来自马原机考题库。`,
     randomText: (count) => `马原同步练 · 随机练习会从 ${count} 题中抽取 20 题，适合按单元复习后混合检查。`,
     wrongText: "马原同步练 · 错题重刷只使用马原同步练错题本，不会混入其他学科。"
-  },
-  junli: {
-    label: "军理",
-    getQuestions: () => window.MILITARY_QUESTIONS || [],
-    bankVersion: "junli-2025-docx-20260621",
-    setModeText: (set) => `军理 · 正在练习第 ${set} 套。题目来自军事理论题库。`,
-    randomText: (count) => `军理 · 随机练习会从 ${count} 题中抽取 20 题，适合考前快速过题。`,
-    wrongText: "军理 · 错题重刷只使用军理错题本，不会混入马原。"
   }
 };
 const SUBJECT_KEYS = Object.keys(SUBJECTS);
@@ -83,6 +76,7 @@ const els = {
   adminBtn: document.querySelector("#adminBtn"),
   changePasswordBtn: document.querySelector("#changePasswordBtn"),
   logoutBtn: document.querySelector("#logoutBtn"),
+  darkModeToggle: document.querySelector("#darkModeToggle"),
   modeText: document.querySelector("#modeText"),
   resetBtn: document.querySelector("#resetBtn"),
   backupStatus: document.querySelector("#backupStatus"),
@@ -122,6 +116,7 @@ const els = {
   answerEditForm: document.querySelector("#answerEditForm"),
   answerEditHint: document.querySelector("#answerEditHint"),
   answerEditFields: document.querySelector("#answerEditFields"),
+  answerSuggestions: document.querySelector("#answerSuggestions"),
   resetAnswerEditBtn: document.querySelector("#resetAnswerEditBtn"),
   saveAnswerEditBtn: document.querySelector("#saveAnswerEditBtn"),
   passwordDialog: document.querySelector("#passwordDialog"),
@@ -198,6 +193,9 @@ function normalizeAppRecords(parsed) {
     for (const subject of SUBJECT_KEYS) {
       base.subjects[subject] = normalizeRecords(parsed.subjects[subject]);
     }
+    for (const [subject, records] of Object.entries(parsed.subjects)) {
+      if (!base.subjects[subject]) base.subjects[subject] = records;
+    }
     base.activeSubject = SUBJECTS[parsed.activeSubject] ? parsed.activeSubject : DEFAULT_SUBJECT;
     base.backupMeta = {
       ...base.backupMeta,
@@ -224,7 +222,7 @@ function isMayuan() {
 }
 
 function isChapterSubject() {
-  return state.subject === "junli" || state.subject === "mayuan_sync";
+  return state.subject === "mayuan_sync";
 }
 
 function getPracticeGroups() {
@@ -414,6 +412,7 @@ function restoreSessionState() {
   const questions = saved.questionIds.map(getQuestionById).filter(Boolean);
   if (!questions.length) return false;
   if (saved.mode !== "wrong" && questions.length !== saved.questionIds.length) return false;
+  if (saved.mode === "choice" && questions.some((question) => question.type !== "single_choice")) return false;
   if (saved.mode === "wrong" && state.wrongReviewSession?.selectedIds?.length) {
     const validSelectedIds = state.wrongReviewSession.selectedIds.filter((questionId) => getQuestionById(questionId));
     if (!validSelectedIds.length) return false;
@@ -586,16 +585,20 @@ function getAnswerSpec(question) {
 
 function formatAnswer(question) {
   const spec = getAnswerSpec(question);
+  return formatAnswerValue(question, spec.answer, spec.keywords);
+}
+
+function formatAnswerValue(question, answer, keywords = []) {
   if (question.type === "single_choice" || question.type === "multiple_choice") {
-    return normalizeChoiceAnswer(spec.answer).split("").map((letter) => {
+    return normalizeChoiceAnswer(answer).split("").map((letter) => {
       const index = letter.charCodeAt(0) - 65;
       return `${letter}. ${question.options[index] || "未知选项"}`;
     }).join("；");
   }
-  if (question.type === "fill_blank" && spec.keywords.length) {
-    return `${spec.answer}（关键词：${spec.keywords.join("、")}）`;
+  if (question.type === "fill_blank" && keywords.length) {
+    return `${answer}（关键词：${keywords.join("、")}）`;
   }
-  return spec.answer;
+  return answer;
 }
 
 function setupSetSelect() {
@@ -672,7 +675,7 @@ function startChoicePractice() {
   state.index = 0;
   state.examSession = null;
   state.sessionQuestions = smartPickQuestions(
-    getCurrentQuestions().filter((question) => question.type === "single_choice" || question.type === "multiple_choice"),
+    getCurrentQuestions().filter((question) => question.type === "single_choice"),
     SET_SIZE,
     Date.now()
   );
@@ -863,7 +866,7 @@ function updateModeButtons() {
     : state.mode === "exam"
       ? `马原 · 第 ${state.examSet} 套模拟考试，满分 ${getExamMaxScore()} 分，限时 30 分钟。`
       : state.mode === "choice"
-        ? `${getCurrentSubject().label} · 选择题专项只抽单选和多选，优先出现未做题。`
+        ? `${getCurrentSubject().label} · 单选题专项只抽单选题，优先出现未做题。`
         : state.mode === "random"
           ? getCurrentSubject().randomText(getCurrentQuestions().length)
           : state.mode === "wrong-select"
@@ -1161,6 +1164,8 @@ function submitAnswer() {
   els.nextBtn.disabled = false;
   els.nextBtn.textContent = state.mode === "wrong" && state.index >= state.sessionQuestions.length - 1 ? "完成本次重刷" : "下一题";
   els.masteredBtn.hidden = state.mode === "wrong" || !state.records.wrongBook[question.id];
+  els.guessedBtn.hidden = !isChapterSubject() || isCurrentAnswerGuessed();
+  els.guessedBtn.disabled = isCurrentAnswerGuessed();
   saveSessionState();
   void persistRecords();
   renderStats();
@@ -1509,7 +1514,41 @@ function openAnswerEditor() {
   const spec = getAnswerSpec(question);
   els.answerEditHint.textContent = `当前题目：${question.title}。修改只保存在你的个人数据里，不会改原始题库文件。`;
   els.answerEditFields.innerHTML = buildAnswerEditorFields(question, spec);
+  renderAnswerSuggestions("正在加载其他用户修正情况...");
   els.answerDialog.showModal();
+  void loadAnswerSuggestions(question);
+}
+
+async function loadAnswerSuggestions(question) {
+  if (!supabaseClient || !state.session?.user) {
+    renderAnswerSuggestions("当前未连接云端，无法加载其他用户修正情况。");
+    return;
+  }
+  try {
+    const data = await invokeAdmin("answerOverrideSuggestions", {
+      subject: state.subject,
+      questionId: question.id
+    });
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    if (!suggestions.length) {
+      renderAnswerSuggestions("暂无其他用户修改这道题的答案。");
+      return;
+    }
+    els.answerSuggestions.innerHTML = suggestions.map((item) => `
+      <div class="answer-suggestion-item">
+        <strong>${escapeHtml(item.displayName || item.studentId || "匿名用户")}</strong>
+        <span>${escapeHtml(formatAnswerValue(question, item.answer || "", Array.isArray(item.keywords) ? item.keywords : []))}</span>
+        <small>${escapeHtml(formatAdminTime(item.updatedAt))}</small>
+      </div>
+    `).join("");
+  } catch (error) {
+    renderAnswerSuggestions(error.message || "加载其他用户修正情况失败。");
+  }
+}
+
+function renderAnswerSuggestions(message) {
+  if (!els.answerSuggestions) return;
+  els.answerSuggestions.innerHTML = `<p class="empty">${escapeHtml(message)}</p>`;
 }
 
 function buildAnswerEditorFields(question, spec) {
@@ -1916,7 +1955,6 @@ function renderAdminUsers(users) {
   els.adminUsers.innerHTML = users.length ? users.map((user) => {
     const mayuan = user.usage?.subjects?.mayuan || {};
     const mayuanSync = user.usage?.subjects?.mayuan_sync || {};
-    const junli = user.usage?.subjects?.junli || {};
     return `
     <div class="admin-user">
       <div>
@@ -1925,7 +1963,6 @@ function renderAdminUsers(users) {
         <div class="admin-user-progress">
           ${formatSubjectUsage("马原", mayuan)}
           ${formatSubjectUsage("马原同步练", mayuanSync)}
-          ${formatSubjectUsage("军理", junli)}
           <span>最近使用：${escapeHtml(formatAdminTime(user.usage?.latest))}${user.has_record ? "" : " · 尚无云端记录"}</span>
         </div>
       </div>
@@ -2066,8 +2103,33 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function applyTheme(isDark) {
+  document.body.classList.toggle("dark-mode", Boolean(isDark));
+  if (els.darkModeToggle) els.darkModeToggle.checked = Boolean(isDark);
+}
+
+function initTheme() {
+  let isDark = false;
+  try {
+    isDark = localStorage.getItem(THEME_STORAGE_KEY) === "1";
+  } catch {
+    isDark = false;
+  }
+  applyTheme(isDark);
+}
+
+function setTheme(isDark) {
+  applyTheme(isDark);
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, isDark ? "1" : "0");
+  } catch {
+    // localStorage can be unavailable in some private browsing contexts.
+  }
+}
+
 function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
+  els.darkModeToggle?.addEventListener("change", () => setTheme(els.darkModeToggle.checked));
   els.logoutBtn.addEventListener("click", logout);
   els.changePasswordBtn.addEventListener("click", openPasswordDialog);
   els.savePasswordBtn.addEventListener("click", savePassword);
@@ -2130,5 +2192,6 @@ function bindEvents() {
   });
 }
 
+initTheme();
 bindEvents();
 void initAuth();

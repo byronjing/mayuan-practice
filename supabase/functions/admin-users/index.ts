@@ -7,7 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
-const subjectKeys = ["mayuan", "mayuan_sync", "junli"];
+const subjectKeys = ["mayuan", "mayuan_sync"];
+
+type AnswerOverrideSuggestion = {
+  studentId: string;
+  displayName: string;
+  answer: string;
+  keywords: unknown[];
+  updatedAt: string;
+};
 
 function emptySubjectRecords() {
   return {
@@ -139,6 +147,18 @@ function studentEmail(studentId: string) {
   return `${studentId}@${Deno.env.get("STUDENT_EMAIL_DOMAIN") || "mayuan.local"}`;
 }
 
+function assertSubject(value: unknown) {
+  const subject = String(value || "");
+  if (!subjectKeys.includes(subject)) throw new Error("学科不存在或已下架。");
+  return subject;
+}
+
+function assertQuestionId(value: unknown) {
+  const questionId = String(value || "").trim();
+  if (!questionId) throw new Error("缺少题目编号。");
+  return questionId;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
@@ -158,18 +178,63 @@ serve(async (req) => {
     const { data: current, error: currentError } = await userClient.auth.getUser();
     if (currentError || !current.user) return jsonResponse({ error: "请先登录。" }, 401);
 
-    const { data: adminProfile, error: adminError } = await adminClient
+    const body = await req.json();
+    const action = String(body.action || "");
+
+    const { data: currentProfile, error: profileError } = await adminClient
       .from("app_users")
-      .select("student_id,role,is_active")
+      .select("user_id,student_id,display_name,role,is_active")
       .eq("user_id", current.user.id)
       .maybeSingle();
-    if (adminError) throw adminError;
+    if (profileError) throw profileError;
+    if (!currentProfile?.is_active) {
+      return jsonResponse({ error: "账号不存在或已停用。" }, 403);
+    }
+
+    if (action === "answerOverrideSuggestions") {
+      const subject = assertSubject(body.subject);
+      const questionId = assertQuestionId(body.questionId);
+
+      const { data: users, error: usersError } = await adminClient
+        .from("app_users")
+        .select("user_id,student_id,display_name,is_active")
+        .eq("is_active", true);
+      if (usersError) throw usersError;
+
+      const { data: records, error: recordsError } = await adminClient
+        .from("practice_records")
+        .select("user_id,records,updated_at");
+      if (recordsError) throw recordsError;
+
+      const usersById = new Map((users || []).map((user) => [user.user_id, user]));
+      const suggestions: AnswerOverrideSuggestion[] = [];
+      for (const row of records || []) {
+        if (row.user_id === current.user.id) continue;
+        const user = usersById.get(row.user_id);
+        if (!user) continue;
+        const normalized = normalizeAppRecords(row.records);
+        const override = normalized.subjects[subject]?.answerOverrides?.[questionId];
+        if (!override || typeof override !== "object") continue;
+        const source = override as Record<string, unknown>;
+        const answer = String(source.answer || "").trim();
+        if (!answer) continue;
+        suggestions.push({
+          studentId: user.student_id,
+          displayName: user.display_name || user.student_id,
+          answer,
+          keywords: Array.isArray(source.keywords) ? source.keywords : [],
+          updatedAt: String(source.updatedAt || row.updated_at || "")
+        });
+      }
+      suggestions.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+      return jsonResponse({ suggestions });
+    }
+
+    const adminProfile = currentProfile;
     if (adminProfile?.role !== "admin" || !adminProfile?.is_active) {
       return jsonResponse({ error: "只有管理员可以管理账号。" }, 403);
     }
-
-    const body = await req.json();
-    const action = String(body.action || "");
 
     if (action === "list") {
       const { data, error } = await adminClient
